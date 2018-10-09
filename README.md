@@ -5,7 +5,7 @@ Randomized concurrency testing for Erlang.
 
 This library uses the randomized scheduling algorithms introduced in our publication:
 
-    Xinhao Yuan, Junfeng Yang, and Ronghui Gu. 2018. Partial Order Aware Concurrency Sampling.
+    Xinhao Yuan, Junfeng Yang, and Ronghui Gu. Partial Order Aware Concurrency Sampling.
     In Computer Aided Verification - 30th International Conference, CAV 2018.
 
 Workflow
