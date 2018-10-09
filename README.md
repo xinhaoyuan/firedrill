@@ -5,13 +5,13 @@ Randomized concurrency testing for Erlang.
 
 This library uses the randomized scheduling algorithms introduced in our publication:
 
-  Xinhao Yuan, Junfeng Yang, and Ronghui Gu. 2018. Partial Order Aware Concurrency Sampling.
-  In Computer Aided Verification - 30th International Conference, CAV 2018.
+    Xinhao Yuan, Junfeng Yang, and Ronghui Gu. 2018. Partial Order Aware Concurrency Sampling.
+    In Computer Aided Verification - 30th International Conference, CAV 2018.
 
 Workflow
 -----
 
-1. Compile the SUT with instrumentation that gives control to Firedrill on synchronization points.
+1. Compile the SUT with instrumentations that gives control to Firedrill on synchronization points.
 
 2. Initialize/finalize `fd_scheduler` before/after tests.
 
