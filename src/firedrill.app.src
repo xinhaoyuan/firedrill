@@ -1,0 +1,23 @@
+{application, firedrill,
+ [{description, "a randomized concurrency testing framework"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {applications,
+   [kernel,
+    stdlib
+   ]},
+  {env,[]},
+  {modules, [ fd_inspect_bang
+            , fd_inspect_ets
+            , fd_inspect_gen
+            , fd_inspect_call
+            , firedrill
+            , fd_scheduler
+            , fd_sched_pos, fd_sched_basicpos, fd_sched_rw
+            , fd_cth
+            ]},
+
+  {maintainers, ["Xinhao Yuan"]},
+  {licenses, ["Apache 2.0"]},
+  {links, []}
+ ]}.
