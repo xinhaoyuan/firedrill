@@ -22,8 +22,9 @@ init(Opts) ->
        rng = rand:seed_s(Seed)
       }.
 
-enqueue_req(ReqInfo, #rw_state{reqs = Reqs, rng = Rng} =  State) ->
-    {P, NewRng} = rand:uniform_s(Rng),
+enqueue_req(#fd_delay_req{data = Data} = ReqInfo, #rw_state{reqs = Reqs, rng = Rng} =  State) ->
+    {UP, NewRng} = rand:uniform_s(Rng),
+    P = math:pow(UP, maps:get(weight, Data, 1)),
     {ok, State#rw_state{reqs = array:set(array:size(Reqs), {ReqInfo, P}, Reqs), rng = NewRng}}.
 
 dequeue_req(#rw_state{reqs = Reqs} = State) ->
