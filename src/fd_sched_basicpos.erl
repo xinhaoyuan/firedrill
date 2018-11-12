@@ -62,7 +62,7 @@ dequeue_req(#rw_state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, Seed
                   {NewP, NewRng} = new_priority(Data, CurRng),
                   {array:set(Index, {RI, NewP}, CurReqs), NewRng}
           end, {Reqs, rand:seed_s(SeedTerm)}, Reqs),
-    io:format(user, "[FD] take guidance ~w, remaining ~w~n", [{Cnt, SeedTerm} | G]),
+    io:format(user, "[FD] take guidance ~w, remaining ~w~n", [{Cnt, SeedTerm}, G]),
     dequeue_req(State#rw_state{reqs = NewReqs, rng = NewRng, dequeue_counter = 0, guidance = G});
 dequeue_req(#rw_state{reqs = Reqs, dequeue_counter = Cnt} = State) ->
     {I, _} = array:foldl(
