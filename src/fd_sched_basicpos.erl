@@ -6,11 +6,11 @@
 -export([init/1, enqueue_req/2, dequeue_req/1, hint/2, to_req_list/1]).
 
 -record(rw_state,
-        { reqs :: array:arary()
-        , rng :: rand:state()
+        { reqs            :: array:arary()
+        , rng             :: rand:state()
         , dequeue_counter :: integer()
-        , guidance :: [term()]
-        , seed :: term()
+        , guidance        :: [term()]
+        , seed            :: term()
         }).
 
 init(Opts) ->
@@ -53,6 +53,7 @@ enqueue_req(#fd_delay_req{data = Data} = ReqInfo, #rw_state{reqs = Reqs, rng = R
 
 dequeue_req(#rw_state{dequeue_counter = Cnt, guidance = [Cnt]} = State) ->
     Seed = rand:export_seed_s(rand:seed_s(exrop)),
+    io:format(user, "[FD] randomize guidance ~w~n", [Cnt]),
     dequeue_req(State#rw_state{guidance = [{Cnt, Seed}], seed = Seed});
 dequeue_req(#rw_state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, SeedTerm} | G]} = State) ->
     {NewReqs, NewRng} =
@@ -61,6 +62,7 @@ dequeue_req(#rw_state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, Seed
                   {NewP, NewRng} = new_priority(Data, CurRng),
                   {array:set(Index, {RI, NewP}, CurReqs), NewRng}
           end, {Reqs, rand:seed_s(SeedTerm)}, Reqs),
+    io:format(user, "[FD] take guidance ~w, remaining ~w~n", [{Cnt, SeedTerm} | G]),
     dequeue_req(State#rw_state{reqs = NewReqs, rng = NewRng, dequeue_counter = 0, guidance = G});
 dequeue_req(#rw_state{reqs = Reqs, dequeue_counter = Cnt} = State) ->
     {I, _} = array:foldl(
