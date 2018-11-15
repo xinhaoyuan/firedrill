@@ -44,7 +44,7 @@ init(Opts) ->
       }.
 
 new_priority(#{delay_level := Level}, Rng) ->
-    {P, NewRng} = rand:unifrom_s(Rng),
+    {P, NewRng} = rand:uniform_s(Rng),
     {P - Level, NewRng};
 new_priority(#{weight := Weight}, Rng) ->
     {UP, NewRng} = rand:uniform_s(Rng),
