@@ -43,9 +43,12 @@ init(Opts) ->
            end
       }.
 
-new_priority(RI, Rng) ->
+new_priority(#{delay_level := Level}, Rng) ->
+    {P, NewRng} = rand:unifrom_s(Rng),
+    {P - Level, NewRng};
+new_priority(#{weight := Weight}, Rng) ->
     {UP, NewRng} = rand:uniform_s(Rng),
-    {math:pow(UP, maps:get(weight, RI, 1)), NewRng}.
+    {math:pow(UP, Weight), NewRng}.
 
 enqueue_req(#fd_delay_req{data = Data} = ReqInfo, #rw_state{reqs = Reqs, rng = Rng} =  State) ->
     {P, NewRng} = new_priority(Data, Rng),
