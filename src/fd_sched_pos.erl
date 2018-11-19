@@ -43,9 +43,15 @@ init(Opts) ->
            end
       }.
 
-new_priority(RI, Rng) ->
+new_priority(#{delay_level := Level}, Rng) ->
+    {P, NewRng} = rand:uniform_s(Rng),
+    {P - Level, NewRng};
+new_priority(#{weight := Weight}, Rng) ->
     {UP, NewRng} = rand:uniform_s(Rng),
-    {math:pow(UP, maps:get(weight, RI, 1)), NewRng}.
+    {math:pow(UP, Weight), NewRng};
+new_priority(_, Rng) ->
+    {UP, NewRng} = rand:uniform_s(Rng),
+    {UP, NewRng}.
 
 enqueue_req(#fd_delay_req{data = Data} = ReqInfo, #rw_state{reqs = Reqs, rng = Rng} =  State) ->
     {P, NewRng} = new_priority(Data, Rng),
@@ -80,12 +86,12 @@ dequeue_req(#rw_state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt} = State) ->
     %% Update priorities
     {NewRng, NewReqList} =
         lists:foldl(fun ({ReqB, P}, {TRng, ReqList}) ->
-                            if
-                                Req#fd_delay_req.to =:= ReqB#fd_delay_req.to ->
-                                    %% Reset priority for the conflict
-                                    {NewP, NewRng} = rand:uniform_s(TRng),
-                                    {NewRng, [{ReqB, NewP}|ReqList]};
+                            case is_racing(Req, #fd_delay_req{data = Data} = ReqB) of
                                 true ->
+                                    %% Reset priority for the conflict
+                                    {NewP, NewRng} = new_priority(Data, TRng),
+                                    {NewRng, [{ReqB, NewP}|ReqList]};
+                                false ->
                                     {TRng, [{ReqB, P}|ReqList]}
                             end
                     end, {Rng, []}, array:to_list(RArr)),
@@ -105,3 +111,12 @@ hint(_, State) ->
 
 to_req_list(#rw_state{reqs = Reqs}) ->
     array:to_list(Reqs).
+
+is_racing(#fd_delay_req{to = To}, #fd_delay_req{to = To}) ->
+    true;
+is_racing(#fd_delay_req{to = global}, #fd_delay_req{}) ->
+    false;
+is_racing(#fd_delay_req{}, #fd_delay_req{to = global}) ->
+    false;
+is_racing(_, _) ->
+    false.
