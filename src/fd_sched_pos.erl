@@ -112,11 +112,11 @@ hint(_, State) ->
 to_req_list(#rw_state{reqs = Reqs}) ->
     array:to_list(Reqs).
 
-is_racing(#fd_delay_req{to = To}, #fd_delay_req{to = To}) ->
-    true;
 is_racing(#fd_delay_req{to = global}, #fd_delay_req{}) ->
     false;
 is_racing(#fd_delay_req{}, #fd_delay_req{to = global}) ->
     false;
+is_racing(#fd_delay_req{to = To}, #fd_delay_req{to = To}) ->
+    true;
 is_racing(_, _) ->
     false.
