@@ -11,6 +11,7 @@
         , dequeue_counter :: integer()
         , guidance        :: [term()]
         , seed            :: term()
+        , trace_tab       :: ets:tid()
         }).
 
 init(Opts) ->
@@ -23,24 +24,24 @@ init(Opts) ->
             V ->
                 {V, true}
         end,
-    #rw_state{
-       reqs = array:new(),
-       rng = rand:seed_s(Seed),
-       dequeue_counter = 0,
-       seed =
-           case IsExternal of
-               true ->
-                   undefined;
-               false ->
-                   Seed
-           end,
-       guidance =
-           case IsExternal of
-               true ->
-                   proplists:get_value(guidance, Opts, []);
-               false ->
-                   []
-           end
+    #rw_state{ reqs = array:new()
+             , rng = rand:seed_s(Seed)
+             , dequeue_counter = 0
+             , seed =
+                   case IsExternal of
+                       true ->
+                           undefined;
+                       false ->
+                           Seed
+                   end
+             , guidance =
+                   case IsExternal of
+                       true ->
+                           proplists:get_value(guidance, Opts, []);
+                       false ->
+                           []
+                   end
+             , trace_tab = proplists:get_value(trace_tab, Opts, undefined)
       }.
 
 new_priority(#{delay_level := Level}, Rng) ->
@@ -60,7 +61,7 @@ enqueue_req(#fd_delay_req{data = Data} = ReqInfo, #rw_state{reqs = Reqs, rng = R
 dequeue_req(#rw_state{dequeue_counter = Cnt, guidance = [Cnt]} = State) ->
     Seed = rand:export_seed_s(rand:seed_s(exrop)),
     io:format(user, "[FD] randomize guidance ~w~n", [Cnt]),
-    dequeue_req(State#rw_state{guidance = [{Cnt, Seed}], seed = Seed});
+    dequeue_req(maybe_trace(State#rw_state{guidance = [{Cnt, Seed}], seed = Seed}, {randomize_guidance, Cnt}));
 dequeue_req(#rw_state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, SeedTerm} | G]} = State) ->
     {NewReqs, NewRng} =
         array:foldl(
@@ -69,7 +70,7 @@ dequeue_req(#rw_state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, Seed
                   {array:set(Index, {RI, NewP}, CurReqs), NewRng}
           end, {Reqs, rand:seed_s(SeedTerm)}, Reqs),
     io:format(user, "[FD] take guidance ~w, remaining ~w~n", [{Cnt, SeedTerm}, G]),
-    dequeue_req(State#rw_state{reqs = NewReqs, rng = NewRng, dequeue_counter = 0, guidance = G});
+    dequeue_req(maybe_trace(State#rw_state{reqs = NewReqs, rng = NewRng, dequeue_counter = 0, guidance = G}, {take_guidance, {Cnt, SeedTerm}, G}));
 dequeue_req(#rw_state{reqs = Reqs, dequeue_counter = Cnt} = State) ->
     {I, _} = array:foldl(
                fun (I, {_, P}, none) ->
@@ -94,9 +95,15 @@ hint({get_seed_info, Ref, From}, #rw_state{dequeue_counter = Cnt, seed = Seed} =
     State;
 hint({set_guidance, Guidance}, State) ->
     io:format(user, "[FD] hint set_guidance ~w~n", [Guidance]),
-    State#rw_state{dequeue_counter = 0, guidance = Guidance};
+    maybe_trace(State#rw_state{dequeue_counter = 0, guidance = Guidance}, {set_guidance, Guidance});
 hint(_, State) ->
     State.
+
+maybe_trace(#rw_state{trace_tab = undefined} = S, _) -> S;
+maybe_trace(#rw_state{trace_tab = Tab} = S, E) ->
+    TC = ets:update_counter(Tab, trace_counter, 1),
+    ets:insert(Tab, {TC, firedrill, E})
+    S.
 
 to_req_list(#rw_state{reqs = Reqs}) ->
     array:to_list(Reqs).
