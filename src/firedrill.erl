@@ -17,6 +17,8 @@ scheduler_to_module(pos) ->
     fd_sched_pos;
 scheduler_to_module(sampling) ->
     fd_sched_sampling;
+scheduler_to_module({module, M}) ->
+    M;
 scheduler_to_module(_) ->
     fd_scheduler.
 
