@@ -102,7 +102,7 @@ hint(_, State) ->
 maybe_trace(#rw_state{trace_tab = undefined} = S, _) -> S;
 maybe_trace(#rw_state{trace_tab = Tab} = S, E) ->
     TC = ets:update_counter(Tab, trace_counter, 1),
-    ets:insert(Tab, {TC, firedrill, E})
+    ets:insert(Tab, {TC, firedrill, E}),
     S.
 
 to_req_list(#rw_state{reqs = Reqs}) ->
