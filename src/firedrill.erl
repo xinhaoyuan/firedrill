@@ -15,6 +15,8 @@ scheduler_to_module(basicpos) ->
     fd_sched_basicpos;
 scheduler_to_module(pos) ->
     fd_sched_pos;
+scheduler_to_module(rapos) ->
+    fd_sched_rapos;
 scheduler_to_module(sampling) ->
     fd_sched_sampling;
 scheduler_to_module({module, M}) ->
