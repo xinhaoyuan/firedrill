@@ -98,7 +98,7 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, variant = Vari
                                         lazy ->
                                             NewCount = maps:get(lazy_counter, Data, 1) + 1,
                                             NewData = Data#{lazy_counter => NewCount},
-                                            {NewRng0, Ran} = rand:uniform_s(TRng),
+                                            {Ran, NewRng0} = rand:uniform_s(TRng),
                                             case Ran * NewCount < 1 of
                                                 true ->
                                                     {NewP, NewRng} = new_priority(NewData, NewRng0),
