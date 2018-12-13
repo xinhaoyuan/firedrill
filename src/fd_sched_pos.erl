@@ -6,11 +6,12 @@
 -export([init/1, enqueue_req/2, dequeue_req/1, hint/2, to_req_list/1]).
 
 -record(state,
-        { reqs :: array:arary()
-        , rng :: rand:state()
+        { reqs            :: array:arary()
+        , rng             :: rand:state()
         , dequeue_counter :: integer()
-        , guidance :: [term()]
-        , seed :: term()
+        , guidance        :: [term()]
+        , variant         :: atom()
+        , seed            :: term()
         }).
 
 init(Opts) ->
@@ -40,7 +41,8 @@ init(Opts) ->
                    proplists:get_value(guidance, Opts, []);
                false ->
                    []
-           end
+           end,
+       variant = proplists:get_value(variant, Opts, undefined)
       }.
 
 new_priority(#{delay_level := Level}, Rng) ->
@@ -68,7 +70,7 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, SeedTer
                   {array:set(Index, {RI, NewP}, CurReqs), NewRng}
           end, {Reqs, rand:seed_s(SeedTerm)}, Reqs),
     dequeue_req(State#state{reqs = NewReqs, rng = NewRng, dequeue_counter = 0, guidance = G});
-dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt} = State) ->
+dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, variant = Variant} = State) ->
     {I, _} = array:foldl(
                fun (I, {_, P}, none) ->
                        {I, P};
@@ -88,9 +90,23 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt} = State) ->
         lists:foldl(fun ({ReqB, P}, {TRng, ReqList}) ->
                             case is_racing(Req, #fd_delay_req{data = Data} = ReqB) of
                                 true ->
-                                    %% Reset priority for the conflict
-                                    {NewP, NewRng} = new_priority(Data, TRng),
-                                    {NewRng, [{ReqB, NewP}|ReqList]};
+                                    case Variant of
+                                        undefined ->
+                                            %% Reset priority for the conflict
+                                            {NewP, NewRng} = new_priority(Data, TRng),
+                                            {NewRng, [{ReqB, NewP}|ReqList]};
+                                        lazy ->
+                                            NewCount = maps:get(lazy_counter, Data, 1) + 1,
+                                            NewData = Data#{lazy_counter => NewCount},
+                                            {NewRng0, Ran} = rand:uniform_s(TRng),
+                                            case Ran * NewCount < 1 of
+                                                true ->
+                                                    {NewP, NewRng} = new_priority(NewData, NewRng0),
+                                                    {NewRng, [{ReqB#fd_delay_req{data = NewData}, NewP}|ReqList]};
+                                                false ->
+                                                    {NewRng0, [{ReqB#fd_delay_req{data = NewData}, P}|ReqList]}
+                                            end
+                                    end;
                                 false ->
                                     {TRng, [{ReqB, P}|ReqList]}
                             end

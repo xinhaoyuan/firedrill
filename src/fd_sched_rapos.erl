@@ -3,6 +3,10 @@
 %% This is the algorithm from paper:
 %% Effective random testing of concurrent programs. In proceeding ASE '07. Koushik Sen.
 
+%% The original RAPOS schedules a program in batch, which is tricky to
+%% implement in our framework. Instead, our implementation generatively
+%% schedules the `batch` by picking one at a time.
+
 -include("firedrill.hrl").
 
 %% scheduler callbacks
