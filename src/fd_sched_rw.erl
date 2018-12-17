@@ -32,6 +32,7 @@ dequeue_req(#rw_state{reqs = Reqs, rng = Rng} = State) ->
     NewReqs = array:resize(S - 1, array:set(I, array:get(S - 1, Reqs), Reqs)),
     {ok, Req, State#rw_state{reqs = NewReqs, rng = NewRng}}.
 
+%% This simply replies undefined instead of ignoring to make morpheus happy.
 hint({get_seed_info, Ref, From}, State) ->
     Reply = undefined,
     io:format(user, "[FD] hint get_seed_info -> ~w~n", [Reply]),
