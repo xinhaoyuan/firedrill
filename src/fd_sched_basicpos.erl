@@ -95,7 +95,7 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM
                     array:foldr(
                       fun (I, _, Acc) when I =:= CI ->
                               Acc;
-                          (_, {Data, _}, {CurRng, L}) ->
+                          (_, {Data, _}, {L, CurRng}) ->
                               {NewP, NewRng} = new_priority(Data, CurRng),
                               {[{Data, NewP} | L], NewRng}
                       end, {[], Rng}, Reqs),
