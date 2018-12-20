@@ -10,6 +10,7 @@
         , rng             :: rand:state()
         , dequeue_counter :: integer()
         , guidance        :: [term()]
+        , reset_watermark :: float()
         , seed            :: term()
         , trace_tab       :: ets:tid()
         }).
@@ -34,6 +35,8 @@ init(Opts) ->
                     false ->
                         Seed
                 end
+          , reset_watermark =
+                proplists:get_value(reset_watermark, Opts, 0.0)
           , guidance =
                 case IsExternal of
                     true ->
@@ -71,8 +74,8 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, SeedTer
           end, {Reqs, rand:seed_s(SeedTerm)}, Reqs),
     io:format(user, "[FD] take guidance ~w, remaining ~w~n", [{Cnt, SeedTerm}, G]),
     dequeue_req(maybe_trace(State#state{reqs = NewReqs, rng = NewRng, dequeue_counter = 0, guidance = G}, {take_guidance, {Cnt, SeedTerm}, G}));
-dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt} = State) ->
-    {I, _} = array:foldl(
+dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM, rng = Rng} = State) ->
+    {CI, CP} = array:foldl(
                fun (I, {_, P}, none) ->
                        {I, P};
                    (I, {_, P}, {BestI, BestP}) ->
@@ -84,9 +87,23 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt} = State) ->
                        end
                end, none, Reqs),
     S = array:size(Reqs),
-    {Req, _} = array:get(I, Reqs),
-    NewReqs = array:resize(S - 1, array:set(I, array:get(S - 1, Reqs), Reqs)),
-    {ok, Req, State#state{reqs = NewReqs, dequeue_counter = Cnt + 1}}.
+    {Req, _} = array:get(CI, Reqs),
+    {NewReqs, NewRng} =
+        case CP < ResetWM of
+            true ->
+                {NewReqList, NewRng0} =
+                    array:foldr(
+                      fun (I, _, Acc) when I =:= CI ->
+                              Acc;
+                          (_, {Data, _}, {CurRng, L}) ->
+                              {NewP, NewRng} = new_priority(Data, CurRng),
+                              {[{Data, NewP} | L], NewRng}
+                      end, {[], Rng}, Reqs),
+                {array:from_list(NewReqList), NewRng0};
+            false ->
+                {array:resize(S - 1, array:set(CI, array:get(S - 1, Reqs), Reqs)), Rng}
+        end,
+    {ok, Req, State#state{reqs = NewReqs, dequeue_counter = Cnt + 1, rng = NewRng}}.
 
 hint({get_seed_info, Ref, From}, #state{dequeue_counter = Cnt, seed = Seed} = State) ->
     Reply = {Seed, Cnt},
