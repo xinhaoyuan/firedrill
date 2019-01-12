@@ -15,7 +15,8 @@
 
 init(Opts) ->
     Scheduler = proplists:get_value(inner_scheduler, Opts, {naive, []}),
-    Mod = firedrill:scheduler_to_module(element(1, Scheduler)),
+    {InnerMod, InnerOpts} =
+        firedrill:get_module_opts(element(1, Scheduler), element(2, Scheduler)),
     Seed =
         case proplists:get_value(seed, Opts, undefined) of
             undefined ->
@@ -29,8 +30,8 @@ init(Opts) ->
        threshold = proplists:get_value(probability, Opts, 1.0),
        to_buffer = proplists:get_value(buffer, Opts, false),
        buffer = queue:new(),
-       inner_sched = Mod,
-       inner_sched_state = Mod:init(element(2, Scheduler))
+       inner_sched = InnerMod,
+       inner_sched_state = InnerMod:init(InnerOpts)
       }.
 
 enqueue_req(Req, #spl_state{rng = Rng, threshold = Th, to_buffer = ToBuffer, inner_sched = Sched, inner_sched_state = InnerState} =  State) ->

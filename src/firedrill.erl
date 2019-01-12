@@ -2,27 +2,29 @@
 
 -include("firedrill.hrl").
 
--export([scheduler_to_module/1, start/1, stop/0, delay/3, apply/4, send/2, send/3, ping_scheduler/0]).
+-export([get_module_opts/2, start/1, stop/0, delay/3, apply/4, send/2, send/3, ping_scheduler/0]).
 
 -export([debug_log_format/2]).
 
 -define(NAME_SCHED, fd_sched).
 -define(NAME_MASTER, fd_sched_master).
 
-scheduler_to_module(rw) ->
-    fd_sched_rw;
-scheduler_to_module(basicpos) ->
-    fd_sched_basicpos;
-scheduler_to_module(pos) ->
-    fd_sched_pos;
-scheduler_to_module(rapos) ->
-    fd_sched_rapos;
-scheduler_to_module(sampling) ->
-    fd_sched_sampling;
-scheduler_to_module({module, M}) ->
-    M;
-scheduler_to_module(_) ->
-    fd_scheduler.
+get_module_opts(rw, Opts) ->
+    {fd_sched_rw, Opts};
+get_module_opts(basicpos, Opts) ->
+    {fd_sched_basicpos, Opts};
+get_module_opts(pos, Opts) ->
+    {fd_sched_pos, Opts};
+get_module_opts(lazypos, Opts) ->
+    {fd_sched_pos, [{variant, lazy} | Opts]};
+get_module_opts(rapos, Opts) ->
+    {fd_sched_rapos, Opts};
+get_module_opts(sampling, Opts) ->
+    {fd_sched_sampling, Opts};
+get_module_opts({module, M}, Opts) ->
+    {M, Opts};
+get_module_opts(_, _) ->
+    {fd_scheduler, []}.
 
 start(Opts) ->
     Master = proplists:get_value(master, Opts, none),

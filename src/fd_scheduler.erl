@@ -32,7 +32,7 @@
 -define(INTERNAL_TIMEOUT, 500).
 
 config(Sched, Opts) ->
-    SchedMod = firedrill:scheduler_to_module(element(1, Sched)),
+    {SchedMod, SchedOpts} = firedrill:get_module_opts(element(1, Sched), element(2, Sched)),
     #state{ dist_states = case proplists:get_value(dist_mode, Opts, false) of
                               true -> dict:new();
                               false -> none
@@ -44,7 +44,7 @@ config(Sched, Opts) ->
           , kick_counter = 0
           , reqs_counter = 0
           , sched_mod = SchedMod
-          , sched_state = SchedMod:init(element(2, Sched))
+          , sched_state = SchedMod:init(SchedOpts)
           , try_fire_timeout = proplists:get_value(try_fire_timeout, Opts, 20)
           , failure_counter_threshold = proplists:get_value(failure_threshold, Opts, 500)
           , trace = []
