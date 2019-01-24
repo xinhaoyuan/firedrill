@@ -3,7 +3,7 @@
 -include("firedrill.hrl").
 
 %% scheduler callbacks
--export([init/1, enqueue_req/2, dequeue_req/1, hint/2, to_req_list/1]).
+-export([init/1, enqueue_req/2, dequeue_req/1, handle_call/3, handle_cast/2, to_req_list/1]).
 
 -record(spl_state, {rng               :: rand:state()
                    ,threshold         :: float()
@@ -70,8 +70,16 @@ dequeue_req(#spl_state{inner_sched = Sched, buffer = Buffer, inner_sched_state =
             end
     end.
 
-hint(H, #spl_state{inner_sched = Sched, inner_sched_state = InnerState} = State) ->
-    State#spl_state{inner_sched_state = Sched:hint(H, InnerState)}.
+handle_call(Req, _From, #spl_state{inner_sched = Sched, inner_sched_state = InnerState} = State) ->
+    case Sched:handle_call(Req, InnerState) of
+        {reply, Reply, NewInnerState} ->
+            {reply, Reply, State#spl_state{inner_sched_state = NewInnerState}};
+        {noreply, NewInnerState} ->
+            {noreply, State#spl_state{inner_sched_state = NewInnerState}}
+    end.
+
+handle_cast(Req, #spl_state{inner_sched = Sched, inner_sched_state = InnerState} = State) ->
+    State#spl_state{inner_sched_state = Sched:handle_cast(Req, InnerState)}.
 
 to_req_list(#spl_state{inner_sched = Sched, buffer = Buffer, inner_sched_state = InnerState}) ->
     queue:to_list(Buffer) ++ Sched:to_req_list(InnerState).

@@ -10,7 +10,7 @@
 -include("firedrill.hrl").
 
 %% scheduler callbacks
--export([init/1, enqueue_req/2, dequeue_req/1, hint/2, to_req_list/1]).
+-export([init/1, enqueue_req/2, dequeue_req/1, handle_call/3, handle_cast/2, to_req_list/1]).
 
 -record(state, { rng :: rand:state()
                , may_skip :: boolean()
@@ -108,7 +108,10 @@ dequeue_req(#state{may_skip = MaySkip, cand = Cand, rng = Rng, next = Next, skip
             end
     end.
 
-hint(_, State) ->
+handle_call(_, _, State) ->
+    {reply, ignored, State}.
+
+handle_cast(_, State) ->
     State.
 
 to_req_list(#state{cand = Cand, next = Next, skipped = Skipped}) ->

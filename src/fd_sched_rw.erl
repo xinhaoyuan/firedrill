@@ -3,7 +3,7 @@
 -include("firedrill.hrl").
 
 %% scheduler callbacks
--export([init/1, enqueue_req/2, dequeue_req/1, hint/2, to_req_list/1]).
+-export([init/1, enqueue_req/2, dequeue_req/1, handle_call/3, handle_cast/2, to_req_list/1]).
 
 -record(rw_state, { reqs :: array:arary()
                   , rng :: rand:state()}).
@@ -32,13 +32,10 @@ dequeue_req(#rw_state{reqs = Reqs, rng = Rng} = State) ->
     NewReqs = array:resize(S - 1, array:set(I, array:get(S - 1, Reqs), Reqs)),
     {ok, Req, State#rw_state{reqs = NewReqs, rng = NewRng}}.
 
-%% This simply replies undefined instead of ignoring to make morpheus happy.
-hint({get_seed_info, Ref, From}, State) ->
-    Reply = undefined,
-    io:format(user, "[FD] hint get_seed_info -> ~w~n", [Reply]),
-    From ! {Ref, Reply},
-    State;
-hint(_, State) ->
+handle_call(_, _, State) ->
+    {reply, ignored, State}.
+
+handle_cast(_, State) ->
     State.
 
 to_req_list(#rw_state{reqs = Reqs}) ->

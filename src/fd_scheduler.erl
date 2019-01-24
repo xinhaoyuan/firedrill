@@ -2,10 +2,10 @@
 
 -include("firedrill.hrl").
 
--export([start_entry/2, start_slave_entry/2, stop/1]).
+-export([start_entry/2, start_slave_entry/2, stop/1, call/2, cast/2]).
 
 %% default scheduler callbacks
--export([init/1, enqueue_req/2, dequeue_req/1, hint/2, to_req_list/1]).
+-export([init/1, enqueue_req/2, dequeue_req/1, handle_call/3, handle_cast/2, to_req_list/1]).
 
 -record(fd_opts, { verbose_dequeue         :: boolean()
                  , verbose_final           :: boolean()}).
@@ -209,8 +209,10 @@ dispatcher(State, M) ->
         fd_notify_idle_ext ->
             KC = State#state.kick_counter,
             try_fire_req(State#state{kick_counter = KC + 1}, true);
-        {hint, H} ->
-            take_hint(State, H);
+        {cast, H} ->
+            take_cast(State, H);
+        {call, From, H} ->
+            take_call(State, From, H);
         exit ->
             exit(State, exited_by_request, none);
         {exit, Pid} ->
@@ -273,9 +275,18 @@ try_fire_req(#state{sched_mod = Mod, sched_state = SchedState, reqs_counter = MC
             dispatcher(State#state{sched_state = NewSchedState})
     end.
 
-take_hint(#state{sched_mod = Mod, sched_state = SchedState} = State, Hint) ->
-    NewSchedState = Mod:hint(Hint, SchedState),
+take_cast(#state{sched_mod = Mod, sched_state = SchedState} = State, Req) ->
+    NewSchedState = Mod:handle_cast(Req, SchedState),
     dispatcher(State#state{sched_state = NewSchedState}).
+
+take_call(#state{sched_mod = Mod, sched_state = SchedState} = State, {Proc, Ref} = From, Req) ->
+    case Mod:handle_call(Req, From, SchedState) of
+        {reply, Reply, NewSchedState} ->
+            Proc ! {Ref, Reply},
+            dispatcher(State#state{sched_state = NewSchedState});
+        {noreply, NewSchedState} ->
+            dispatcher(State#state{sched_state = NewSchedState})
+    end.
 
 exit(State, Reason, NotifyTo) ->
     finalize(State#state{result = Reason, notify_exit = NotifyTo}).
@@ -348,6 +359,17 @@ slave_dispatcher(#slave_state{master = Master} = State) ->
             slave_dispatcher(State)
     end.
 
+call(Scheduler, Req) ->
+    Ref = make_ref(),
+    Scheduler ! {call, {self(), Ref}, Req},
+    receive
+        {Ref, Reply} ->
+            Reply
+    end.
+
+cast(Scheduler, Req) ->
+    Scheduler ! {cast, Req}.
+
 %%% Naive FIFO scheduler callbacks
 
 init(_) ->
@@ -361,8 +383,11 @@ dequeue_req(Reqs) ->
     {{value, ReqInfo}, NewReqs} = queue:out(Reqs),
     {ok, ReqInfo, NewReqs}.
 
-hint(_, Reqs) ->
-    Reqs.
+handle_call(_, _, State) ->
+    {reply, ignored, State}.
+
+handle_cast(_, State) ->
+    State.
 
 to_req_list(Reqs) ->
     queue:to_list(Reqs).

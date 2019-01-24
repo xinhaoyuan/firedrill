@@ -3,7 +3,7 @@
 -include("firedrill.hrl").
 
 %% scheduler callbacks
--export([init/1, enqueue_req/2, dequeue_req/1, hint/2, to_req_list/1]).
+-export([init/1, enqueue_req/2, dequeue_req/1, handle_call/3, handle_cast/2, to_req_list/1]).
 
 -record(state,
         { reqs            :: array:arary()
@@ -105,15 +105,17 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM
         end,
     {ok, Req, State#state{reqs = NewReqs, dequeue_counter = Cnt + 1, rng = NewRng}}.
 
-hint({get_seed_info, Ref, From}, #state{dequeue_counter = Cnt, seed = Seed} = State) ->
-    Reply = {Seed, Cnt},
-    io:format(user, "[FD] hint get_seed_info -> ~w~n", [Reply]),
-    From ! {Ref, Reply},
-    State;
-hint({set_guidance, Guidance}, State) ->
-    io:format(user, "[FD] hint set_guidance ~w~n", [Guidance]),
-    maybe_trace(State#state{dequeue_counter = 0, guidance = Guidance}, {set_guidance, Guidance});
-hint(_, State) ->
+handle_call({get_trace_info}, _From, #state{dequeue_counter = Cnt, seed = Seed} = State) ->
+    Reply = #{seed => Seed, dequeue_count => Cnt},
+    io:format(user, "[FD] get_trace_info -> ~w~n", [Reply]),
+    {reply, Reply, State};
+handle_call({set_guidance, Guidance}, _From, State) ->
+    io:format(user, "[FD] set_guidance ~w~n", [Guidance]),
+    {reply, ok, maybe_trace(State#state{dequeue_counter = 0, guidance = Guidance}, {set_guidance, Guidance})};
+handle_call(_, _, State) ->
+    {reply, ignored, State}.
+
+handle_cast(_, State) ->
     State.
 
 maybe_trace(#state{trace_tab = undefined} = S, _) -> S;
