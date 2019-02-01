@@ -21,7 +21,7 @@ init(Opts) ->
             undefined ->
                 R = rand:export_seed_s(rand:seed_s(exrop)),
                 io:format(user, "seed = ~p~n", [R]),
-                {R, false};
+                {R, proplists:is_defined(guidance, Opts)};
             V ->
                 {V, true}
         end,
@@ -121,10 +121,8 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset
 
 handle_call({get_trace_info}, _From, #state{dequeue_counter = Cnt, seed = Seed, priority_reset_count = PriorityResetCount} = State) ->
     Reply = #{seed => Seed, dequeue_count => Cnt, priority_reset_count => PriorityResetCount},
-    io:format(user, "[FD] get_trace_info -> ~w~n", [Reply]),
     {reply, Reply, State};
 handle_call({set_guidance, Guidance}, _From, State) ->
-    io:format(user, "[FD] set_guidance ~w~n", [Guidance]),
     {reply, ok, State#state{dequeue_counter = 0, guidance = Guidance}};
 handle_call(_, _, State) ->
     {reply, ignored, State}.

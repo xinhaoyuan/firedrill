@@ -107,10 +107,8 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM
 
 handle_call({get_trace_info}, _From, #state{dequeue_counter = Cnt, seed = Seed} = State) ->
     Reply = #{seed => Seed, dequeue_count => Cnt},
-    io:format(user, "[FD] get_trace_info -> ~w~n", [Reply]),
     {reply, Reply, State};
 handle_call({set_guidance, Guidance}, _From, State) ->
-    io:format(user, "[FD] set_guidance ~w~n", [Guidance]),
     {reply, ok, maybe_trace(State#state{dequeue_counter = 0, guidance = Guidance}, {set_guidance, Guidance})};
 handle_call(_, _, State) ->
     {reply, ignored, State}.
