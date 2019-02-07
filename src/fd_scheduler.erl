@@ -313,7 +313,10 @@ finalize(#state{dist_states = Map, sched_mod = Mod} = State) ->
     State#state{dist_states = dict:to_list(State#state.dist_states),
                 sched_state = Mod:to_req_list(State#state.sched_state)}.
 
-state_to_readable(#state{reqs_counter = ReqCounter, dequeue_counter = DequeueCounter, failure_counter = FailureCounter, kick_counter = KickCounter}) ->
+state_to_readable(#state{ reqs_counter = ReqCounter
+                        , dequeue_counter = DequeueCounter
+                        , failure_counter = FailureCounter
+                        , kick_counter = KickCounter}) ->
     #{remaining_cnt => ReqCounter, dequeue_cnt => DequeueCounter, failure_cnt => FailureCounter, kick_cnt => KickCounter}.
 
 %%% scheduler process running on slave nodes
