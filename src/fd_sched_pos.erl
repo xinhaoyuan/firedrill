@@ -10,7 +10,7 @@
         , rng                  :: rand:state()
         , dequeue_counter      :: integer()
         , guidance             :: [term()]
-        , variant              :: atom()
+        , variant              :: undefined | lazy | simrw
         , seed                 :: term()
         , priority_reset_count :: integer()
         , max_age              :: integer()
@@ -49,18 +49,8 @@ init(Opts) ->
         , max_age = 1000 %% XXX make it configurable
       }.
 
-new_priority(#{delay_level := Level}, Rng) ->
-    {P, NewRng} = rand:uniform_s(Rng),
-    {P - Level, NewRng};
-new_priority(#{weight := Weight}, Rng) ->
-    {UP, NewRng} = rand:uniform_s(Rng),
-    {math:pow(UP, Weight), NewRng};
-new_priority(_, Rng) ->
-    {UP, NewRng} = rand:uniform_s(Rng),
-    {UP, NewRng}.
-
 enqueue_req(#fd_delay_req{data = Data} = ReqInfo, #state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt} =  State) ->
-    {P, NewRng} = new_priority(Data, Rng),
+    {P, NewRng} = fd_rand_helper:new_priority(Data, Rng),
     {ok, State#state{reqs = array:set(array:size(Reqs), {ReqInfo, Cnt, P}, Reqs), rng = NewRng}}.
 
 dequeue_req(#state{dequeue_counter = Cnt, guidance = [Cnt]} = State) ->
@@ -70,7 +60,7 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, SeedTer
     {NewReqs, NewRng} =
         array:foldl(
           fun (Index, {#fd_delay_req{data = Data} = RI, _, _}, {CurReqs, CurRng}) ->
-                  {NewP, NewRng} = new_priority(Data, CurRng),
+                  {NewP, NewRng} = fd_rand_helper:new_priority(Data, CurRng),
                   {array:set(Index, {RI, Cnt, NewP}, CurReqs), NewRng}
           end, {Reqs, rand:seed_s(SeedTerm)}, Reqs),
     dequeue_req(State#state{reqs = NewReqs, rng = NewRng, dequeue_counter = 0, guidance = G});
@@ -91,26 +81,31 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset
     RArr = array:resize(S - 1, array:set(I, array:get(S - 1, Reqs), Reqs)),
     %% Update priorities
     {NewRng, NewReqList, ResetCount} =
-        lists:foldl(fun ({ReqB, Birth, P}, {TRng, ReqList, CurResetCount}) ->
+        lists:foldl(fun ({#fd_delay_req{data = Data} = ReqB, Birth, P}, {TRng, ReqList, CurResetCount}) ->
                             {TRng1, Data1, ToReset} =
-                                case is_racing(Req, #fd_delay_req{data = Data} = ReqB) of
-                                    true ->
-                                        case Variant of
-                                            undefined ->
-                                                {TRng, Data, true};
-                                            lazy ->
-                                                NewCount = maps:get(lazy_counter, Data, 1) + 1,
-                                                NewData = Data#{lazy_counter => NewCount},
-                                                {Ran, NewRng0} = rand:uniform_s(TRng),
-                                                case Ran * NewCount < 1 of
-                                                    true ->
-                                                        {NewRng0, NewData, true};
-                                                    false ->
-                                                        {NewRng0, NewData, false}
-                                                end
-                                        end;
-                                    false ->
-                                        {TRng, Data, false}
+                                case Variant of
+                                    simrw ->
+                                        {TRng, Data, true};
+                                    _ ->
+                                        case is_racing(Req, Data) of
+                                            true ->
+                                                case Variant of
+                                                    undefined ->
+                                                        {TRng, Data, true};
+                                                    lazy ->
+                                                        NewCount = maps:get(lazy_counter, Data, 1) + 1,
+                                                        NewData = Data#{lazy_counter => NewCount},
+                                                        {Ran, NewRng0} = rand:uniform_s(TRng),
+                                                        case Ran * NewCount < 1 of
+                                                            true ->
+                                                                {NewRng0, NewData, true};
+                                                            false ->
+                                                                {NewRng0, NewData, false}
+                                                        end
+                                                end;
+                                            false ->
+                                                {TRng, Data, false}
+                                        end
                                 end,
                             ReqB1 =
                                 case Data1 =:= Data of
@@ -119,7 +114,7 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset
                                 end,
                             case ToReset orelse Cnt - Birth > State#state.max_age of
                                 true ->
-                                    {NewP, TRng2} = new_priority(Data1, TRng1),
+                                    {NewP, TRng2} = fd_rand_helper:new_priority(Data1, TRng1),
                                     {TRng2, [{ReqB1, Cnt, NewP}|ReqList], CurResetCount + 1};
                                 false ->
                                     {TRng1, [{ReqB1, Birth, P}|ReqList], CurResetCount}

@@ -49,18 +49,8 @@ init(Opts) ->
           , max_age = 1000 %% XXX make it configurable
           }.
 
-new_priority(#{delay_level := Level}, Rng) ->
-    {P, NewRng} = rand:uniform_s(Rng),
-    {P - Level, NewRng};
-new_priority(#{weight := Weight}, Rng) ->
-    {UP, NewRng} = rand:uniform_s(Rng),
-    {math:pow(UP, Weight), NewRng};
-new_priority(_, Rng) ->
-    {UP, NewRng} = rand:uniform_s(Rng),
-    {UP, NewRng}.
-
 enqueue_req(#fd_delay_req{data = Data} = ReqInfo, #state{reqs = Reqs, dequeue_counter = Cnt, rng = Rng} =  State) ->
-    {P, NewRng} = new_priority(Data, Rng),
+    {P, NewRng} = fd_rand_helper:new_priority(Data, Rng),
     {ok, State#state{reqs = array:set(array:size(Reqs), {ReqInfo, Cnt, P}, Reqs), rng = NewRng}}.
 
 dequeue_req(#state{dequeue_counter = Cnt, guidance = [Cnt]} = State) ->
@@ -71,7 +61,7 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, SeedTer
     {NewReqs, NewRng} =
         array:foldl(
           fun (Index, {#fd_delay_req{data = Data} = RI, _, _}, {CurReqs, CurRng}) ->
-                  {NewP, NewRng} = new_priority(Data, CurRng),
+                  {NewP, NewRng} = fd_rand_helper:new_priority(Data, CurRng),
                   {array:set(Index, {RI, Cnt, NewP}, CurReqs), NewRng}
           end, {Reqs, rand:seed_s(SeedTerm)}, Reqs),
     io:format(user, "[FD] take guidance ~w, remaining ~w~n", [{Cnt, SeedTerm}, G]),
@@ -97,7 +87,7 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM
                       fun (I, _, Acc) when I =:= CI ->
                               Acc;
                           (_, {Data, _, _}, {L, CurRng}) ->
-                              {NewP, NewRng} = new_priority(Data, CurRng),
+                              {NewP, NewRng} = fd_rand_helper:new_priority(Data, CurRng),
                               {[{Data, Cnt, NewP} | L], NewRng}
                       end, {[], Rng}, Reqs),
                 {array:from_list(NewReqList), NewRng0};
@@ -108,7 +98,7 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM
                               Acc;
                           (_, {Data, Birth, _}, {L, CurRng})
                             when Cnt - Birth > State#state.max_age ->
-                              {NewP, NewRng} = new_priority(Data, CurRng),
+                              {NewP, NewRng} = fd_rand_helper:new_priority(Data, CurRng),
                               {[{Data, Cnt, NewP} | L], NewRng};
                           (_, Item, {L, CurRng}) ->
                               {[Item | L], CurRng}
