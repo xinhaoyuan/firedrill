@@ -107,7 +107,7 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM
                       fun (I, _, Acc) when I =:= CI ->
                               Acc;
                           (_, {Data, Birth, _}, {L, CurRng})
-                            when Cnt - Birth < State#state.max_age ->
+                            when Cnt - Birth > State#state.max_age ->
                               {NewP, NewRng} = new_priority(Data, CurRng),
                               {[{Data, Cnt, NewP} | L], NewRng};
                           (_, Item, {L, CurRng}) ->
