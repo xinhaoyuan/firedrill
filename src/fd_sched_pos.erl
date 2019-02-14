@@ -128,7 +128,6 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset
 
 handle_call({get_trace_info}, _From, #state{dequeue_counter = Cnt, seed = Seed, priority_reset_count = PriorityResetCount} = State) ->
     Reply = #{seed => Seed, dequeue_count => Cnt, priority_reset_count => PriorityResetCount},
-    io:format(user, "[FD] get_trace_info => ~p~n", [Reply]),
     {reply, Reply, State};
 handle_call({set_guidance, Guidance}, _From, State) ->
     {reply, ok, State#state{dequeue_counter = 0, guidance = Guidance}};

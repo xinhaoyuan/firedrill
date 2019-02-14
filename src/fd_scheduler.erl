@@ -7,7 +7,8 @@
 %% default scheduler callbacks
 -export([init/1, enqueue_req/2, dequeue_req/1, handle_call/3, handle_cast/2, to_req_list/1]).
 
--record(fd_opts, { verbose_dequeue         :: boolean()
+-record(fd_opts, { verbose_enqueue         :: boolean()
+                 , verbose_dequeue         :: boolean()
                  , verbose_final           :: boolean()}).
 -record(dist_state, { slave                :: pid()
                     }).
@@ -51,7 +52,9 @@ config(Sched, Opts) ->
           , result = none
           , exit_timeout = 100
           , notify_exit = none
-          , opts = #fd_opts{ verbose_dequeue =
+          , opts = #fd_opts{ verbose_enqueue =
+                                 proplists:get_value(verbose_enqueue, Opts, false)
+                           , verbose_dequeue =
                                  proplists:get_value(verbose_dequeue, Opts, false)
                            , verbose_final =
                                  proplists:get_value(verbose_final, Opts, false)
@@ -232,7 +235,13 @@ dispatcher(State, M) ->
 buffer_req(#state{sched_mod = Mod, sched_state = SchedState, reqs_counter = MC} = State, ReqInfo) ->
     {Resp, NewSchedState} = Mod:enqueue_req(ReqInfo, SchedState),
     case Resp of
-        ok -> dispatcher(State#state{sched_state = NewSchedState, reqs_counter = MC + 1});
+        ok ->
+            case State of
+                #state{opts = #fd_opts{verbose_enqueue = true}} ->
+                    io:format(user, "[FD] enqueue ~p~n", [ReqInfo]);
+                _ -> ok
+            end,
+            dispatcher(State#state{sched_state = NewSchedState, reqs_counter = MC + 1});
         rejected ->
             #fd_delay_req{ref = Ref, from = From} = ReqInfo,
             From ! #fd_delay_resp{ref = Ref},
