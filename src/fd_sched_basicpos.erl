@@ -22,7 +22,7 @@ init(Opts) ->
             undefined ->
                 R = rand:export_seed_s(rand:seed_s(exrop)),
                 io:format(user, "seed = ~p~n", [R]),
-                {R, false};
+                {R, proplists:is_defined(guidance, Opts)};
             V ->
                 {V, true}
         end,
