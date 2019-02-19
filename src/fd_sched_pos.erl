@@ -66,9 +66,9 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, SeedTer
     dequeue_req(State#state{reqs = NewReqs, rng = NewRng, dequeue_counter = 0, guidance = G});
 dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset_count = PRCnt, variant = Variant} = State) ->
     {I, _} = array:foldl(
-               fun (I, {_, _, P}, none) ->
+               fun (I, {_, _, _, P}, none) ->
                        {I, P};
-                   (I, {_, _, P}, {BestI, BestP}) ->
+                   (I, {_, _, _, P}, {BestI, BestP}) ->
                        if
                            P > BestP ->
                                {I, P};
