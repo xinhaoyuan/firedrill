@@ -116,7 +116,7 @@ start_entry(SchedMod, Opts) ->
 naive_dispatcher() ->
     receive
         #fd_delay_req{ref = Ref, from = From} ->
-            From ! #fd_delay_resp{ref = Ref},
+            From ! #fd_delay_resp{ref = Ref, data = undefined},
             naive_dispatcher();
         _ ->
             naive_dispatcher()
@@ -126,7 +126,7 @@ naive_dispatcher() ->
 naive_dispatcher(#state{sched_state = []}) ->
     naive_dispatcher();
 naive_dispatcher(#state{sched_state = [#fd_delay_req{ref = Ref, from = From}|T]} = State) ->
-    From ! #fd_delay_resp{ref = Ref},
+    From ! #fd_delay_resp{ref = Ref, data = undefined},
     naive_dispatcher(State#state{sched_state = T}).
 
 dispatcher(State) ->
@@ -244,7 +244,7 @@ buffer_req(#state{sched_mod = Mod, sched_state = SchedState, reqs_counter = MC} 
             dispatcher(State#state{sched_state = NewSchedState, reqs_counter = MC + 1});
         rejected ->
             #fd_delay_req{ref = Ref, from = From} = ReqInfo,
-            From ! #fd_delay_resp{ref = Ref},
+            From ! #fd_delay_resp{ref = Ref, data = undefined},
             dispatcher(State#state{sched_state = NewSchedState})
     end.
 
@@ -253,13 +253,13 @@ try_fire_req(#state{sched_mod = Mod, sched_state = SchedState, reqs_counter = MC
              MC =< 0 -> {none, SchedState};
              true -> Mod:dequeue_req(SchedState)
          end of
-        {ok, #fd_delay_req{ref = Ref, from = From} = Req, NewSchedState} ->
+        {ok, #fd_delay_req{ref = Ref, from = From} = Req, Data, NewSchedState} ->
             case State of
                 #state{opts = #fd_opts{verbose_dequeue = true}} ->
                     io:format(user, "[FD] dequeue ~p from ~p requests ~n", [Req, State#state.reqs_counter]);
                 _ -> ok
             end,
-            From ! #fd_delay_resp{ref = Ref},
+            From ! #fd_delay_resp{ref = Ref, data = Data},
             #state{dequeue_counter = DC, trace = Trace} = State,
             case State#state.dist_states of
                 none ->

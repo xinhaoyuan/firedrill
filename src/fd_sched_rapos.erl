@@ -94,7 +94,7 @@ dequeue_req(#state{may_skip = MaySkip, cand = Cand, rng = Rng, next = Next, skip
                     NewCand = array:from_list(NewCandList),
                     NewNext = array:from_list(NewNextList),
                     NewSkipped = array:from_list(NewSkippedList),
-                    {ok, Req, State#state{may_skip = true, rng = NewRng, cand = NewCand, next = NewNext, skipped = NewSkipped}};
+                    {ok, Req, undefined, State#state{may_skip = true, rng = NewRng, cand = NewCand, next = NewNext, skipped = NewSkipped}};
                 false ->
                     %% Skip the current request to `skipped`
                     NewCand = array:from_list(

@@ -63,8 +63,8 @@ dequeue_req(#spl_state{inner_sched = Sched, buffer = Buffer, inner_sched_state =
         true ->
             #spl_state{inner_sched = Sched, inner_sched_state = InnerState} = State,
             case Sched:dequeue_req(InnerState) of
-                {ok, Req, NewInnerState} ->
-                    {ok, Req, State#spl_state{inner_sched_state = NewInnerState}};
+                {ok, Req, Data, NewInnerState} ->
+                    {ok, Req, Data, State#spl_state{inner_sched_state = NewInnerState}};
                 {none, NewInnerState} ->
                     {none, State#spl_state{inner_sched_state = NewInnerState}}
             end

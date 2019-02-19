@@ -51,7 +51,7 @@ init(Opts) ->
 
 enqueue_req(#fd_delay_req{data = Data} = ReqInfo, #state{reqs = Reqs, dequeue_counter = Cnt, rng = Rng} =  State) ->
     {P, NewRng} = fd_rand_helper:new_priority(Data, Rng),
-    {ok, State#state{reqs = array:set(array:size(Reqs), {ReqInfo, Cnt, P}, Reqs), rng = NewRng}}.
+    {ok, State#state{reqs = array:set(array:size(Reqs), {ReqInfo, Cnt, Cnt, P}, Reqs), rng = NewRng}}.
 
 dequeue_req(#state{dequeue_counter = Cnt, guidance = [Cnt]} = State) ->
     Seed = rand:export_seed_s(rand:seed_s(exrop)),
@@ -60,9 +60,9 @@ dequeue_req(#state{dequeue_counter = Cnt, guidance = [Cnt]} = State) ->
 dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, SeedTerm} | G]} = State) ->
     {NewReqs, NewRng} =
         array:foldl(
-          fun (Index, {#fd_delay_req{data = Data} = RI, _, _}, {CurReqs, CurRng}) ->
+          fun (Index, {#fd_delay_req{data = Data} = RI, Birth, _, _}, {CurReqs, CurRng}) ->
                   {NewP, NewRng} = fd_rand_helper:new_priority(Data, CurRng),
-                  {array:set(Index, {RI, Cnt, NewP}, CurReqs), NewRng}
+                  {array:set(Index, {RI, Birth, Cnt, NewP}, CurReqs), NewRng}
           end, {Reqs, rand:seed_s(SeedTerm)}, Reqs),
     io:format(user, "[FD] take guidance ~w, remaining ~w~n", [{Cnt, SeedTerm}, G]),
     dequeue_req(maybe_trace(State#state{reqs = NewReqs, rng = NewRng, dequeue_counter = 0, guidance = G}, {take_guidance, {Cnt, SeedTerm}, G}));
@@ -78,7 +78,7 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM
                                {BestI, BestP}
                        end
                end, none, Reqs),
-    {Req, _, _} = array:get(CI, Reqs),
+    {Req, Birth, _, _} = array:get(CI, Reqs),
     {NewReqs, NewRng} =
         case CP < ResetWM of
             true ->
@@ -96,16 +96,19 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM
                     array:foldr(
                       fun (I, _, Acc) when I =:= CI ->
                               Acc;
-                          (_, {Data, Birth, _}, {L, CurRng})
-                            when Cnt - Birth > State#state.max_age ->
+                          (_, {Data, _Birth, LastReset, _}, {L, CurRng})
+                            when Cnt - LastReset > State#state.max_age ->
                               {NewP, NewRng} = fd_rand_helper:new_priority(Data, CurRng),
-                              {[{Data, Cnt, NewP} | L], NewRng};
+                              {[{Data, _Birth, Cnt, NewP} | L], NewRng};
                           (_, Item, {L, CurRng}) ->
                               {[Item | L], CurRng}
                       end, {[], Rng}, Reqs),
                 {array:from_list(NewReqList), NewRng0}
         end,
-    {ok, Req, State#state{reqs = NewReqs, dequeue_counter = Cnt + 1, rng = NewRng}}.
+    { ok
+    , Req
+    , #{age => Cnt - Birth}
+    , State#state{reqs = NewReqs, dequeue_counter = Cnt + 1, rng = NewRng}}.
 
 handle_call({get_trace_info}, _From, #state{dequeue_counter = Cnt, seed = Seed} = State) ->
     Reply = #{seed => Seed, dequeue_count => Cnt},

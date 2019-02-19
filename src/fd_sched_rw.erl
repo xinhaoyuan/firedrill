@@ -30,7 +30,7 @@ dequeue_req(#rw_state{reqs = Reqs, rng = Rng} = State) ->
     {R, NewRng} = rand:uniform_s(S, Rng), I = R - 1,
     Req = array:get(I, Reqs),
     NewReqs = array:resize(S - 1, array:set(I, array:get(S - 1, Reqs), Reqs)),
-    {ok, Req, State#rw_state{reqs = NewReqs, rng = NewRng}}.
+    {ok, Req, undefined, State#rw_state{reqs = NewReqs, rng = NewRng}}.
 
 handle_call(_, _, State) ->
     {reply, ignored, State}.

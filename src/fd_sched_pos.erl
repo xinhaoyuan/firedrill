@@ -51,7 +51,7 @@ init(Opts) ->
 
 enqueue_req(#fd_delay_req{data = Data} = ReqInfo, #state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt} =  State) ->
     {P, NewRng} = fd_rand_helper:new_priority(Data, Rng),
-    {ok, State#state{reqs = array:set(array:size(Reqs), {ReqInfo, Cnt, P}, Reqs), rng = NewRng}}.
+    {ok, State#state{reqs = array:set(array:size(Reqs), {ReqInfo, Cnt, Cnt, P}, Reqs), rng = NewRng}}.
 
 dequeue_req(#state{dequeue_counter = Cnt, guidance = [Cnt]} = State) ->
     Seed = rand:export_seed_s(rand:seed_s(exrop)),
@@ -59,9 +59,9 @@ dequeue_req(#state{dequeue_counter = Cnt, guidance = [Cnt]} = State) ->
 dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, SeedTerm} | G]} = State) ->
     {NewReqs, NewRng} =
         array:foldl(
-          fun (Index, {#fd_delay_req{data = Data} = RI, _, _}, {CurReqs, CurRng}) ->
+          fun (Index, {#fd_delay_req{data = Data} = RI, Birth, _, _}, {CurReqs, CurRng}) ->
                   {NewP, NewRng} = fd_rand_helper:new_priority(Data, CurRng),
-                  {array:set(Index, {RI, Cnt, NewP}, CurReqs), NewRng}
+                  {array:set(Index, {RI, Birth, Cnt, NewP}, CurReqs), NewRng}
           end, {Reqs, rand:seed_s(SeedTerm)}, Reqs),
     dequeue_req(State#state{reqs = NewReqs, rng = NewRng, dequeue_counter = 0, guidance = G});
 dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset_count = PRCnt, variant = Variant} = State) ->
@@ -77,11 +77,11 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset
                        end
                end, none, Reqs),
     S = array:size(Reqs),
-    {Req, _, _} = array:get(I, Reqs),
+    {Req, Birth, _, _} = array:get(I, Reqs),
     RArr = array:resize(S - 1, array:set(I, array:get(S - 1, Reqs), Reqs)),
     %% Update priorities
     {NewRng, NewReqList, ResetCount} =
-        lists:foldl(fun ({#fd_delay_req{data = Data} = ReqB, Birth, P}, {TRng, ReqList, CurResetCount}) ->
+        lists:foldl(fun ({#fd_delay_req{data = Data} = ReqB, _Birth, LastReset, P}, {TRng, ReqList, CurResetCount}) ->
                             {TRng1, Data1, ToReset} =
                                 case Variant of
                                     simrw ->
@@ -112,19 +112,22 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset
                                     true -> ReqB;
                                     false -> ReqB#fd_delay_req{data = Data1}
                                 end,
-                            case ToReset orelse Cnt - Birth > State#state.max_age of
+                            case ToReset orelse Cnt - LastReset > State#state.max_age of
                                 true ->
                                     {NewP, TRng2} = fd_rand_helper:new_priority(Data1, TRng1),
-                                    {TRng2, [{ReqB1, Cnt, NewP}|ReqList], CurResetCount + 1};
+                                    {TRng2, [{ReqB1, _Birth, Cnt, NewP}|ReqList], CurResetCount + 1};
                                 false ->
-                                    {TRng1, [{ReqB1, Birth, P}|ReqList], CurResetCount}
+                                    {TRng1, [{ReqB1, _Birth, LastReset, P}|ReqList], CurResetCount}
                             end
                     end, {Rng, [], 0}, array:to_list(RArr)),
     NewReqs = array:from_list(NewReqList),
-    {ok, Req, State#state{reqs = NewReqs,
-                          rng = NewRng,
-                          dequeue_counter = Cnt + 1,
-                          priority_reset_count = PRCnt + ResetCount}}.
+    { ok
+    , Req
+    , #{age => Cnt - Birth}
+    , State#state{reqs = NewReqs,
+                  rng = NewRng,
+                  dequeue_counter = Cnt + 1,
+                  priority_reset_count = PRCnt + ResetCount}}.
 
 handle_call({get_trace_info}, _From, #state{dequeue_counter = Cnt, seed = Seed, priority_reset_count = PriorityResetCount} = State) ->
     Reply = #{seed => Seed, dequeue_count => Cnt, priority_reset_count => PriorityResetCount},
