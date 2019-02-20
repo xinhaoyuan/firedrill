@@ -86,9 +86,9 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM
                     array:foldr(
                       fun (I, _, Acc) when I =:= CI ->
                               Acc;
-                          (_, {#fd_delay_req{data = Data} = Req, Birth, _, _}, {L, CurRng}) ->
+                          (_, {#fd_delay_req{data = Data} = RI, _Birth, _, _}, {L, CurRng}) ->
                               {NewP, NewRng} = fd_rand_helper:new_priority(Data, CurRng),
-                              {[{Req, Birth, Cnt, NewP} | L], NewRng}
+                              {[{RI, _Birth, Cnt, NewP} | L], NewRng}
                       end, {[], Rng}, Reqs),
                 {array:from_list(NewReqList), NewRng0};
             false ->
@@ -96,10 +96,10 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM
                     array:foldr(
                       fun (I, _, Acc) when I =:= CI ->
                               Acc;
-                          (_, {#fd_delay_req{data = Data} = Req, _Birth, LastReset, _}, {L, CurRng})
+                          (_, {#fd_delay_req{data = Data} = RI, _Birth, LastReset, _}, {L, CurRng})
                             when Cnt - LastReset > State#state.max_age ->
                               {NewP, NewRng} = fd_rand_helper:new_priority(Data, CurRng),
-                              {[{Req, _Birth, Cnt, NewP} | L], NewRng};
+                              {[{RI, _Birth, Cnt, NewP} | L], NewRng};
                           (_, Item, {L, CurRng}) ->
                               {[Item | L], CurRng}
                       end, {[], Rng}, Reqs),
@@ -107,7 +107,7 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM
         end,
     { ok
     , Req
-    , #{age => Cnt - Birth, data => ReqData)}
+    , #{age => Cnt - Birth, data => ReqData}
     , State#state{reqs = NewReqs, dequeue_counter = Cnt + 1, rng = NewRng}}.
 
 handle_call({get_trace_info}, _From, #state{dequeue_counter = Cnt, seed = Seed} = State) ->
