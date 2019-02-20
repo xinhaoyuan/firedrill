@@ -77,7 +77,7 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset
                        end
                end, none, Reqs),
     S = array:size(Reqs),
-    {Req, Birth, _, _} = array:get(I, Reqs),
+    {#fd_delay_req{data = ReqData} = Req, Birth, _, _} = array:get(I, Reqs),
     RArr = array:resize(S - 1, array:set(I, array:get(S - 1, Reqs), Reqs)),
     %% Update priorities
     {NewRng, NewReqList, ResetCount} =
@@ -123,7 +123,7 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset
     NewReqs = array:from_list(NewReqList),
     { ok
     , Req
-    , #{age => Cnt - Birth}
+    , #{age => Cnt - Birth, weight => maps:get(weight, ReqData, undefined)}
     , State#state{reqs = NewReqs,
                   rng = NewRng,
                   dequeue_counter = Cnt + 1,

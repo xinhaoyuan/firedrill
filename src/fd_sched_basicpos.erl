@@ -78,7 +78,7 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM
                                {BestI, BestP}
                        end
                end, none, Reqs),
-    {Req, Birth, _, _} = array:get(CI, Reqs),
+    {#fd_delay_req{data = ReqData} = Req, Birth, _, _} = array:get(CI, Reqs),
     {NewReqs, NewRng} =
         case CP < ResetWM of
             true ->
@@ -107,7 +107,7 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM
         end,
     { ok
     , Req
-    , #{age => Cnt - Birth}
+    , #{age => Cnt - Birth, weight => maps:get(weight, ReqData, undefined)}
     , State#state{reqs = NewReqs, dequeue_counter = Cnt + 1, rng = NewRng}}.
 
 handle_call({get_trace_info}, _From, #state{dequeue_counter = Cnt, seed = Seed} = State) ->
