@@ -87,7 +87,7 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset
                                     simrw ->
                                         {TRng, Data, true};
                                     _ ->
-                                        case is_racing(Req, Data) of
+                                        case is_racing(Req, ReqB) of
                                             true ->
                                                 case Variant of
                                                     undefined ->
@@ -149,5 +149,5 @@ is_racing(#fd_delay_req{}, #fd_delay_req{to = global}) ->
     false;
 is_racing(#fd_delay_req{to = To}, #fd_delay_req{to = To}) ->
     true;
-is_racing(_, _) ->
+is_racing(#fd_delay_req{}, #fd_delay_req{}) ->
     false.
