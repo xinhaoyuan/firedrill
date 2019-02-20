@@ -51,7 +51,7 @@ init(Opts) ->
 
 enqueue_req(#fd_delay_req{data = Data} = Req, #state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt} =  State) ->
     {P, NewRng} = fd_rand_helper:new_priority(Data, Rng),
-    {ok, State#state{reqs = array:set(array:size(Reqs), {Req, #{birth => Cnt, last_reset => Cnt, reset_count => 0}, P}, Reqs), rng = NewRng}}.
+    {ok, State#state{reqs = array:set(array:size(Reqs), {Req, #{birth => Cnt, last_reset => Cnt, reset => []}, P}, Reqs), rng = NewRng}}.
 
 dequeue_req(#state{dequeue_counter = Cnt, guidance = [Cnt]} = State) ->
     Seed = rand:export_seed_s(rand:seed_s(exrop)),
@@ -61,7 +61,7 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, SeedTer
         array:foldl(
           fun (Index, {#fd_delay_req{data = Data} = Req, ReqInfo, _}, {CurReqs, CurRng}) ->
                   {NewP, NewRng} = fd_rand_helper:new_priority(Data, CurRng),
-                  {array:set(Index, {Req, ReqInfo#{last_reset := Cnt, reset_count := maps:get(reset_count, ReqInfo) + 1}, NewP}, CurReqs), NewRng}
+                  {array:set(Index, {Req, ReqInfo#{last_reset := Cnt, reset := [Cnt - maps:get(last_reset, ReqInfo) | maps:get(reset, ReqInfo)]}, NewP}, CurReqs), NewRng}
           end, {Reqs, rand:seed_s(SeedTerm)}, Reqs),
     dequeue_req(State#state{reqs = NewReqs, rng = NewRng, dequeue_counter = 0, guidance = G});
 dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset_count = PRCnt, variant = Variant} = State) ->
@@ -110,7 +110,7 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset
                             case ToReset orelse Cnt - LastReset > State#state.max_age of
                                 true ->
                                     {NewP, TRng2} = fd_rand_helper:new_priority(Data, TRng1),
-                                    {TRng2, [{ReqB, Info1#{last_reset := Cnt, reset_count := maps:get(reset_count, Info) + 1}, NewP}|ReqList], CurResetCount + 1};
+                                    {TRng2, [{ReqB, Info1#{last_reset := Cnt, reset := [Cnt - LastReset | maps:get(reset, Info)]}, NewP}|ReqList], CurResetCount + 1};
                                 false ->
                                     {TRng1, [{ReqB, Info1, P}|ReqList], CurResetCount}
                             end
@@ -118,7 +118,7 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset
     NewReqs = array:from_list(NewReqList),
     { ok
     , Req
-    , #{age => Cnt - maps:get(birth, ReqInfo), weight => maps:get(weight, ReqData, undefined), reset_count => maps:get(reset_count, ReqInfo)}
+    , #{age => Cnt - maps:get(birth, ReqInfo), weight => maps:get(weight, ReqData, undefined), reset => [Cnt - maps:get(last_reset, ReqInfo) | maps:get(reset, ReqInfo)]}
     , State#state{reqs = NewReqs,
                   rng = NewRng,
                   dequeue_counter = Cnt + 1,
