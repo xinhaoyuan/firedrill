@@ -68,9 +68,9 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, SeedTer
     dequeue_req(maybe_trace(State#state{reqs = NewReqs, rng = NewRng, dequeue_counter = 0, guidance = G}, {take_guidance, {Cnt, SeedTerm}, G}));
 dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM, rng = Rng} = State) ->
     {CI, CP} = array:foldl(
-               fun (I, {_, _, P}, none) ->
+               fun (I, {_, _, _, P}, none) ->
                        {I, P};
-                   (I, {_, _, P}, {BestI, BestP}) ->
+                   (I, {_, _, _, P}, {BestI, BestP}) ->
                        if
                            P > BestP ->
                                {I, P};
