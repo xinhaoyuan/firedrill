@@ -118,7 +118,10 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset
     NewReqs = array:from_list(NewReqList),
     { ok
     , Req
-    , #{age => Cnt - maps:get(birth, ReqInfo), weight => maps:get(weight, ReqData, undefined), reset => [Cnt - maps:get(last_reset, ReqInfo) | maps:get(reset, ReqInfo)]}
+    , #{ age => Cnt - maps:get(birth, ReqInfo)
+       , weight => maps:get(weight, ReqData, undefined)
+         %% dummy head to avoid string format
+       , reset => [head, Cnt - maps:get(last_reset, ReqInfo) | maps:get(reset, ReqInfo)]}
     , State#state{reqs = NewReqs,
                   rng = NewRng,
                   dequeue_counter = Cnt + 1,
