@@ -59,9 +59,9 @@ dequeue_req(#state{dequeue_counter = Cnt, guidance = [Cnt]} = State) ->
 dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, guidance = [{Cnt, SeedTerm} | G]} = State) ->
     {NewReqs, NewRng} =
         array:foldl(
-          fun (Index, {#fd_delay_req{data = Data} = RI, Birth, _, _}, {CurReqs, CurRng}) ->
+          fun (Index, {#fd_delay_req{data = Data} = Req, ReqInfo, _}, {CurReqs, CurRng}) ->
                   {NewP, NewRng} = fd_rand_helper:new_priority(Data, CurRng),
-                  {array:set(Index, {RI, Birth, Cnt, NewP}, CurReqs), NewRng}
+                  {array:set(Index, {Req, ReqInfo#{last_reset := Cnt, reset_count := maps:get(reset_count, ReqInfo) + 1}, NewP}, CurReqs), NewRng}
           end, {Reqs, rand:seed_s(SeedTerm)}, Reqs),
     dequeue_req(State#state{reqs = NewReqs, rng = NewRng, dequeue_counter = 0, guidance = G});
 dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset_count = PRCnt, variant = Variant} = State) ->
@@ -77,7 +77,7 @@ dequeue_req(#state{reqs = Reqs, rng = Rng, dequeue_counter = Cnt, priority_reset
                        end
                end, none, Reqs),
     S = array:size(Reqs),
-    {#fd_delay_req{data = ReqData} = Req, ReqInfo, _, _} = array:get(I, Reqs),
+    {#fd_delay_req{data = ReqData} = Req, ReqInfo, _} = array:get(I, Reqs),
     RArr = array:resize(S - 1, array:set(I, array:get(S - 1, Reqs), Reqs)),
     %% Update priorities
     {NewRng, NewReqList, ResetCount} =
