@@ -393,7 +393,7 @@ enqueue_req(ReqInfo, Reqs) ->
 dequeue_req(Reqs) ->
     %% this cannot fail
     {{value, ReqInfo}, NewReqs} = queue:out(Reqs),
-    {ok, ReqInfo, NewReqs}.
+    {ok, ReqInfo, undefined, NewReqs}.
 
 handle_call(_, _, State) ->
     {reply, ignored, State}.
