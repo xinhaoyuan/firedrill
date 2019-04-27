@@ -219,7 +219,7 @@ maybe_update_conc_length(#state{reqs = Reqs, conc_length = CL, max_conc_length =
     end.
 
 handle_call({get_trace_info}, _From, #state{conc_length = CL, max_conc_length = MaxCL, dequeue_counter = Cnt, seed = Seed} = State) ->
-    Reply = #{seed => Seed, dequeue_count => Cnt, max_conc_length = max(CL, MaxCL)},
+    Reply = #{seed => Seed, dequeue_count => Cnt, max_conc_length => max(CL, MaxCL)},
     {reply, Reply, State};
 handle_call({set_guidance, Guidance}, _From, State) ->
     {reply, ok, maybe_trace(State#state{dequeue_counter = 0, guidance = Guidance}, {set_guidance, Guidance})};
