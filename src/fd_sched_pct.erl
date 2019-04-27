@@ -6,7 +6,7 @@
 -export([init/1, enqueue_req/2, dequeue_req/1, handle_call/3, handle_cast/2, to_req_list/1]).
 
 -record(state,
-        { pri             :: dict:dict(term(), {float(), integer()}) %% from -> priority, last access (for deterministic order)
+        { pri             :: dict:dict(term(), {float(), integer()}) %% from -> priority, last enqueue counter
         , reqs            :: array:arary()
         , reset_depth     :: integer()
         , reset_length    :: integer()
@@ -15,6 +15,7 @@
         , conc_length     :: integer()
         , max_conc_length :: integer()
         , rng             :: rand:state()
+        , last_reset_enqueue_counter :: integer()
         , enqueue_counter :: integer()
         , dequeue_counter :: integer()
         , guidance        :: [term()]
@@ -22,12 +23,19 @@
         , trace_tab       :: ets:tid()
         }).
 
-build_reset_info(SortedPriList, Base, Depth, Length, Rng) ->
-    PriLen = length(SortedPriList),
+build_reset_info(SortedPriList, LastResetECnt, Base, Depth, Length, Rng) ->
+    ActivePriCount =
+        lists:foldl(
+          fun ({_, {_, ECnt}}, C) ->
+                  case ECnt >= LastResetECnt of
+                      true -> C + 1;
+                      false -> C
+                  end
+          end, 0, SortedPriList),
     {Rng1, Path, PriReset} =
         lists:foldl(
           fun(_, {CurRng, CurPath, CurPriReset}) ->
-                  {Pos, CurRng1} = rand:uniform_s(Length + PriLen, CurRng),
+                  {Pos, CurRng1} = rand:uniform_s(Length + ActivePriCount, CurRng),
                   case Pos > Length of
                       true ->
                           {CurRng1, CurPath, [Pos - Length | CurPriReset]};
@@ -38,15 +46,21 @@ build_reset_info(SortedPriList, Base, Depth, Length, Rng) ->
     PriResetSet = sets:from_list(PriReset),
     {_, NewPri, Rng2} =
         lists:foldl(
-          fun ({F, {_, E}}, {I, CurPri, CurRng}) ->
+          fun ({F, {_, ECnt}}, {I0, CurPri, CurRng}) ->
                   {P, CurRng1} = rand:uniform_s(CurRng),
-                  case sets:is_element(I, PriResetSet) of
+                  case ECnt >= LastResetECnt of
                       true ->
-                          {I + 1, dict:store(F, {P + 1, E}, CurPri), CurRng1};
+                          I = I0 + 1,
+                          case sets:is_element(I, PriResetSet) of
+                              true ->
+                                  {I, dict:store(F, {P, ECnt}, CurPri), CurRng1};
+                              false ->
+                                  {I, dict:store(F, {P + 1, ECnt}, CurPri), CurRng1}
+                          end;
                       false ->
-                          {I + 1, dict:store(F, {P, E}, CurPri), CurRng1}
+                          {I0, dict:store(F, {P + 1, ECnt}, CurPri), CurRng1}
                   end
-          end, {1, dict:new(), Rng1}, SortedPriList),
+          end, {0, dict:new(), Rng1}, SortedPriList),
     {Path, NewPri, Rng2}.
 
 try_hit_path(Cnt, Path) ->
@@ -104,6 +118,7 @@ init(Opts) ->
           , conc_length = 0
           , max_conc_length = 0
           , rng = rand:seed_s(Seed)
+          , last_reset_enqueue_counter = 0
           , enqueue_counter = 0
           , dequeue_counter = 0
           , seed =
@@ -143,7 +158,9 @@ dequeue_req(#state{dequeue_counter = Cnt, guidance = [Cnt]} = State) ->
 dequeue_req(#state{dequeue_counter = Cnt, guidance = [{Cnt, SeedTerm} | G]} = State) ->
     io:format(user, "[FD] take guidance ~w, remaining ~w~n", [{Cnt, SeedTerm}, G]),
     dequeue_req(maybe_trace(State#state{reset_remain = 0, reset_path = [], rng = rand:seed_s(SeedTerm), dequeue_counter = 0, guidance = G}, {take_guidance, {Cnt, SeedTerm}, G}));
-dequeue_req(#state{pri = Pri, reqs = Reqs, reset_depth = Depth, reset_length = Length, reset_remain = 0, dequeue_counter = Cnt, rng = Rng} = State) ->
+dequeue_req(#state{pri = Pri, reqs = Reqs, reset_depth = Depth, reset_length = Length, reset_remain = 0,
+                   last_reset_enqueue_counter = LRECnt, enqueue_counter = ECnt,
+                   dequeue_counter = Cnt, rng = Rng} = State) ->
     {NewReqs, NewRng0} =
         array:foldl(
           fun (Index, {RI, Birth, _, _}, {CurReqs, CurRng}) ->
@@ -155,8 +172,8 @@ dequeue_req(#state{pri = Pri, reqs = Reqs, reset_depth = Depth, reset_length = L
           fun ({_, {_, E1}}, {_, {_, E2}}) ->
                   E1 < E2
           end, dict:to_list(Pri)),
-    {Path, Pri1, NewRng1} = build_reset_info(SortedPriList, Cnt, Depth, Length, NewRng0),
-    dequeue_req(maybe_trace(State#state{pri = Pri1, reqs = NewReqs, reset_remain = Length, reset_path = Path, rng = NewRng1},
+    {Path, Pri1, NewRng1} = build_reset_info(SortedPriList, LRECnt, Cnt, Depth, Length, NewRng0),
+    dequeue_req(maybe_trace(State#state{pri = Pri1, reqs = NewReqs, reset_remain = Length, reset_path = Path, last_reset_enqueue_counter = ECnt, rng = NewRng1},
                             {reset_path, Path, Pri1}));
 dequeue_req(#state{pri = Pri, reqs = Reqs, reset_remain = ResetRemain, reset_path = ResetPath, dequeue_counter = Cnt, rng = Rng} = State) ->
     {CI, CFrom, _, _} = array:foldl(
