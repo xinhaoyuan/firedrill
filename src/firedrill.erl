@@ -19,6 +19,8 @@ get_module_opts(lazypos, Opts) ->
     {fd_sched_pos, [{variant, lazy} | Opts]};
 get_module_opts(simrw, Opts) ->
     {fd_sched_pos, [{variant, simrw} | Opts]};
+get_module_opts(pct, Opts) ->
+    {fd_sched_pct, Opts};
 get_module_opts(rapos, Opts) ->
     {fd_sched_rapos, Opts};
 get_module_opts(sampling, Opts) ->
