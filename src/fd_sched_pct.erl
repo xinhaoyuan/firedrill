@@ -12,6 +12,8 @@
         , reset_length    :: integer()
         , reset_remain    :: integer()
         , reset_path      :: [integer()]
+        , conc_length     :: integer()
+        , max_conc_length :: integer()
         , rng             :: rand:state()
         , enqueue_counter :: integer()
         , dequeue_counter :: integer()
@@ -71,7 +73,7 @@ init(Opts) ->
         end,
     ResetDepth =
         case os:getenv("FD_PCT_DEPTH") of
-            false -> 
+            false ->
                 case proplists:get_value(reset_depth, Opts) of
                     undefined ->
                         error(need_pct_depth);
@@ -99,6 +101,8 @@ init(Opts) ->
           , reset_length = ResetLength
           , reset_remain = 0
           , reset_path = []
+          , conc_length = 0
+          , max_conc_length = 0
           , rng = rand:seed_s(Seed)
           , enqueue_counter = 0
           , dequeue_counter = 0
@@ -123,7 +127,7 @@ enqueue_req(#fd_delay_req{data = Data} = ReqInfo, #state{pri = Pri, reqs = Reqs,
     From = maps:get(from, Data),
     {Rng0, Pri1} =
         case dict:find(From, Pri) of
-            {ok, {P, _}} -> 
+            {ok, {P, _}} ->
                 {Rng, dict:store(From, {P, ECnt}, Pri)};
             error ->
                 {P, _NewRng} = rand:uniform_s(Rng),
@@ -180,12 +184,13 @@ dequeue_req(#state{pri = Pri, reqs = Reqs, reset_remain = ResetRemain, reset_pat
           end, [], Reqs),
     NewReqs = array:from_list(NewReqList),
     RetData = #{age => Cnt - Birth, weight => maps:get(weight, ReqData, undefined)},
+
     case try_hit_path(Cnt, ResetPath) of
         false ->
             { ok
             , Req
             , RetData
-            , State#state{reqs = NewReqs, reset_remain = ResetRemain - 1, dequeue_counter = Cnt + 1}};
+            , maybe_update_conc_length(State#state{reqs = NewReqs, reset_remain = ResetRemain - 1, dequeue_counter = Cnt + 1})};
         NewPath ->
             {NewFromP, NewRng} = rand:uniform_s(Rng),
             case dict:fetch(CFrom, Pri) of
@@ -195,12 +200,26 @@ dequeue_req(#state{pri = Pri, reqs = Reqs, reset_remain = ResetRemain, reset_pat
             { ok
             , Req
             , RetData
-            , State#state{pri = NewPri, reqs = NewReqs, reset_remain = ResetRemain - 1, reset_path = NewPath,
-                          dequeue_counter = Cnt + 1, rng = NewRng}}
+            , maybe_update_conc_length(
+                State#state{pri = NewPri, reqs = NewReqs, reset_remain = ResetRemain - 1, reset_path = NewPath,
+                            dequeue_counter = Cnt + 1, rng = NewRng})}
     end.
 
-handle_call({get_trace_info}, _From, #state{dequeue_counter = Cnt, seed = Seed} = State) ->
-    Reply = #{seed => Seed, dequeue_count => Cnt},
+maybe_update_conc_length(#state{reqs = Reqs, conc_length = CL, max_conc_length = MaxCL} = State) ->
+    case array:size(Reqs) of
+        0 ->
+            case CL > MaxCL of
+                true ->
+                    State#state{conc_length = 0, max_conc_length = CL};
+                false ->
+                    State#state{conc_length = 0}
+            end;
+        _ ->
+            State#state{conc_length = CL + 1}
+    end.
+
+handle_call({get_trace_info}, _From, #state{conc_length = CL, max_conc_length = MaxCL, dequeue_counter = Cnt, seed = Seed} = State) ->
+    Reply = #{seed => Seed, dequeue_count => Cnt, max_conc_length = max(CL, MaxCL)},
     {reply, Reply, State};
 handle_call({set_guidance, Guidance}, _From, State) ->
     {reply, ok, maybe_trace(State#state{dequeue_counter = 0, guidance = Guidance}, {set_guidance, Guidance})};
