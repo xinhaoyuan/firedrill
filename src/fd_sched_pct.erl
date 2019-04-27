@@ -184,7 +184,6 @@ dequeue_req(#state{pri = Pri, reqs = Reqs, reset_remain = ResetRemain, reset_pat
           end, [], Reqs),
     NewReqs = array:from_list(NewReqList),
     RetData = #{age => Cnt - Birth, weight => maps:get(weight, ReqData, undefined)},
-
     case try_hit_path(Cnt, ResetPath) of
         false ->
             { ok
@@ -210,9 +209,9 @@ maybe_update_conc_length(#state{reqs = Reqs, conc_length = CL, max_conc_length =
         0 ->
             case CL > MaxCL of
                 true ->
-                    State#state{conc_length = 0, max_conc_length = CL};
+                    State#state{conc_length = 0, reset_remain = 0, max_conc_length = CL};
                 false ->
-                    State#state{conc_length = 0}
+                    State#state{conc_length = 0, reset_remain = 0}
             end;
         _ ->
             State#state{conc_length = CL + 1}
