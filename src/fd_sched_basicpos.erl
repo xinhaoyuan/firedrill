@@ -9,7 +9,6 @@
         { reqs            :: array:arary()
         , rng             :: rand:state()
         , conc_length     :: integer()
-        , max_conc_length :: integer()
         , dequeue_counter :: integer()
         , guidance        :: [term()]
         , reset_watermark :: float()
@@ -31,7 +30,6 @@ init(Opts) ->
     #state{ reqs = array:new()
           , rng = rand:seed_s(Seed)
           , conc_length = 0
-          , max_conc_length = 0
           , dequeue_counter = 0
           , seed =
                 case IsExternal of
@@ -114,21 +112,16 @@ dequeue_req(#state{reqs = Reqs, dequeue_counter = Cnt, reset_watermark = ResetWM
     , #{age => Cnt - Birth, weight => maps:get(weight, ReqData, undefined)}
     , maybe_update_conc_length(State#state{reqs = NewReqs, dequeue_counter = Cnt + 1, rng = NewRng})}.
 
-maybe_update_conc_length(#state{reqs = Reqs, conc_length = CL, max_conc_length = MaxCL} = State) ->
+maybe_update_conc_length(#state{reqs = Reqs, conc_length = CL} = State) ->
     case array:size(Reqs) of
         0 ->
-            case CL > MaxCL of
-                true ->
-                    State#state{conc_length = 0, max_conc_length = CL};
-                false ->
-                    State#state{conc_length = 0}
-            end;
+            State;
         _ ->
             State#state{conc_length = CL + 1}
     end.
 
-handle_call({get_trace_info}, _From, #state{conc_length = CL, max_conc_length = MaxCL, dequeue_counter = Cnt, seed = Seed} = State) ->
-    Reply = #{seed => Seed, dequeue_count => Cnt, max_conc_length => max(CL, MaxCL)},
+handle_call({get_trace_info}, _From, #state{conc_length = CL, dequeue_counter = Cnt, seed = Seed} = State) ->
+    Reply = #{seed => Seed, dequeue_count => Cnt, conc_length => CL},
     {reply, Reply, State};
 handle_call({set_guidance, Guidance}, _From, State) ->
     {reply, ok, maybe_trace(State#state{dequeue_counter = 0, guidance = Guidance}, {set_guidance, Guidance})};

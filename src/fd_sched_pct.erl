@@ -13,7 +13,6 @@
         , reset_remain    :: integer()
         , reset_path      :: [integer()]
         , conc_length     :: integer()
-        , max_conc_length :: integer()
         , rng             :: rand:state()
         , last_reset_enqueue_counter :: integer()
         , enqueue_counter :: integer()
@@ -91,7 +90,6 @@ init(Opts) ->
           , reset_remain = 0
           , reset_path = []
           , conc_length = 0
-          , max_conc_length = 0
           , rng = rand:seed_s(Seed)
           , last_reset_enqueue_counter = 0
           , enqueue_counter = 0
@@ -150,63 +148,78 @@ dequeue_req(#state{pri = Pri, reqs = Reqs, reset_depth = Depth, reset_length = L
     {Path, Pri1, NewRng1} = build_reset_info(SortedPriList, Cnt, Depth, Length, NewRng0),
     dequeue_req(maybe_trace(State#state{pri = Pri1, reqs = NewReqs, reset_remain = Length, reset_path = Path, last_reset_enqueue_counter = ECnt, rng = NewRng1},
                             {reset_path, Path, Pri1}));
-dequeue_req(#state{pri = Pri, reqs = Reqs, reset_remain = ResetRemain, reset_path = ResetPath, dequeue_counter = Cnt, rng = Rng} = State) ->
-    {CI, CFrom, _, _} = array:foldl(
-               fun (I, {#fd_delay_req{data = #{from := From}}, _, _, ReqP}, none) ->
-                       {P, _} = dict:fetch(From, Pri),
-                       {I, From, P, ReqP};
-                   (I, {#fd_delay_req{data = #{from := From}}, _, _, ReqP}, {_, BestFrom, BestP, BestReqP} = B) ->
-                       {P, _} = dict:fetch(From, Pri),
-                       if
-                           From =:= BestFrom, ReqP > BestReqP ->
-                               {I, BestFrom, BestP, ReqP};
-                           From =/= BestFrom, P > BestP ->
-                               {I, From, P, ReqP};
-                           true ->
-                               B
-                       end
-               end, none, Reqs),
-    case try_hit_path(Cnt, ResetPath) of
-        false ->
-            {#fd_delay_req{data = ReqData} = Req, Birth, _, _} = array:get(CI, Reqs),
-            NewReqList =
-                array:foldr(
-                  fun (I, _, L) when I =:= CI ->
-                          L;
-                      (_, Item, L) ->
-                          [Item | L]
-                  end, [], Reqs),
-            NewReqs = array:from_list(NewReqList),
+dequeue_req(#state{pri = Pri, reqs = Reqs, %% reset_remain = ResetRemain,
+                   reset_path = ResetPath, conc_length = CLen, dequeue_counter = Cnt, rng = Rng} = State) ->
+    case array:size(Reqs) of
+        1 ->
+            {#fd_delay_req{data = ReqData} = Req, Birth, _, _} = array:get(0, Reqs),
             RetData = #{age => Cnt - Birth, weight => maps:get(weight, ReqData, undefined)},
             { ok
             , Req
             , RetData
-            , maybe_update_conc_length(State#state{reqs = NewReqs, reset_remain = ResetRemain - 1, dequeue_counter = Cnt + 1})};
-        NewPath ->
-            {NewFromP, NewRng} = rand:uniform_s(Rng),
-            NewPri =
-                case dict:fetch(CFrom, Pri) of
-                    {_, ECnt} ->
-                        dict:store(CFrom, {NewFromP, ECnt}, Pri)
-                end,
-            dequeue_req(State#state{pri = NewPri, reset_path = NewPath, rng = NewRng})
-    end.
-
-maybe_update_conc_length(#state{reqs = Reqs, conc_length = CL, max_conc_length = MaxCL} = State) ->
-    case array:size(Reqs) of
-        0 ->
-            case CL > MaxCL of
-                true ->
-                    State#state{conc_length = 0, reset_remain = 0, max_conc_length = CL};
-                false ->
-                    State#state{conc_length = 0, reset_remain = 0}
-            end;
+            , State#state{reqs = array:new(), dequeue_counter = Cnt + 1}};
         _ ->
-            State#state{conc_length = CL + 1}
+            {CI, CFrom, _, _} =
+                array:foldl(
+                  fun (I, {#fd_delay_req{data = #{from := From}}, _, _, ReqP}, none) ->
+                          {P, _} = dict:fetch(From, Pri),
+                          {I, From, P, ReqP};
+                      (I, {#fd_delay_req{data = #{from := From}}, _, _, ReqP}, {_, BestFrom, BestP, BestReqP} = B) ->
+                          {P, _} = dict:fetch(From, Pri),
+                          if
+                              From =:= BestFrom, ReqP > BestReqP ->
+                                  {I, BestFrom, BestP, ReqP};
+                              From =/= BestFrom, P > BestP ->
+                                  {I, From, P, ReqP};
+                              true ->
+                                  B
+                          end
+                  end, none, Reqs),
+            case try_hit_path(CLen, ResetPath) of
+                false ->
+                    {#fd_delay_req{data = ReqData} = Req, Birth, _, _} = array:get(CI, Reqs),
+                    NewReqList =
+                        array:foldr(
+                          fun (I, _, L) when I =:= CI ->
+                                  L;
+                              (_, Item, L) ->
+                                  [Item | L]
+                          end, [], Reqs),
+                    NewReqs = array:from_list(NewReqList),
+                    RetData = #{age => Cnt - Birth, weight => maps:get(weight, ReqData, undefined)},
+                    { ok
+                    , Req
+                    , RetData
+                    , State#state{reqs = NewReqs,
+                                  %% do not reset for now
+                                  % reset_remain = ResetRemain - 1,
+                                  conc_length = CLen + 1, dequeue_counter = Cnt + 1}};
+                NewPath ->
+                    {NewFromP, NewRng} = rand:uniform_s(Rng),
+                    NewPri =
+                        case dict:fetch(CFrom, Pri) of
+                            {_, ECnt} ->
+                                dict:store(CFrom, {NewFromP, ECnt}, Pri)
+                        end,
+                    dequeue_req(State#state{pri = NewPri, reset_path = NewPath, rng = NewRng})
+            end
     end.
 
-handle_call({get_trace_info}, _From, #state{conc_length = CL, max_conc_length = MaxCL, dequeue_counter = Cnt, seed = Seed} = State) ->
-    Reply = #{seed => Seed, dequeue_count => Cnt, max_conc_length => max(CL, MaxCL)},
+%% maybe_update_conc_length(#state{reqs = Reqs, conc_length = CL, max_conc_length = MaxCL} = State) ->
+%%     case array:size(Reqs) of
+%%         0 ->
+%%             case CL > MaxCL of
+%%                 true ->
+%%                     State#state{conc_length = 0, reset_remain = 0, max_conc_length = CL};
+%%                 false ->
+%%                     State#state{conc_length = 0, reset_remain = 0}
+%%             end;
+%%         _ ->
+%%             State#state{conc_length = CL + 1}
+%%     end.
+
+handle_call({get_trace_info}, _From, #state{conc_length = CL, dequeue_counter = Cnt, seed = Seed} = State) ->
+    Reply = #{seed => Seed, dequeue_count => Cnt, conc_length => CL},
     {reply, Reply, State};
 handle_call({set_guidance, Guidance}, _From, State) ->
     {reply, ok, maybe_trace(State#state{dequeue_counter = 0, guidance = Guidance}, {set_guidance, Guidance})};
