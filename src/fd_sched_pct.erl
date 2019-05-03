@@ -23,44 +23,19 @@
         , trace_tab       :: ets:tid()
         }).
 
-build_reset_info(SortedPriList, LastResetECnt, Base, Depth, Length, Rng) ->
-    ActivePriCount =
+build_reset_info(SortedPriList, Base, Depth, Length, Rng) ->
+    {Rng1, Path} =
         lists:foldl(
-          fun ({_, {_, ECnt}}, C) ->
-                  case ECnt >= LastResetECnt of
-                      true -> C + 1;
-                      false -> C
-                  end
-          end, 0, SortedPriList),
-    {Rng1, Path, PriReset} =
+          fun(_, {CurRng, CurPath}) ->
+                  {Pos, CurRng1} = rand:uniform_s(Length, CurRng),
+                  {CurRng1, [Base + Pos - 1 | CurPath]}
+          end, {Rng, []}, lists:seq(1, Depth)),
+    {NewPri, Rng2} =
         lists:foldl(
-          fun(_, {CurRng, CurPath, CurPriReset}) ->
-                  {Pos, CurRng1} = rand:uniform_s(Length + ActivePriCount, CurRng),
-                  case Pos > Length of
-                      true ->
-                          {CurRng1, CurPath, [Pos - Length | CurPriReset]};
-                      false ->
-                          {CurRng1, [Base + Pos - 1 | CurPath], CurPriReset}
-                  end
-          end, {Rng, [], []}, lists:seq(1, Depth)),
-    PriResetSet = sets:from_list(PriReset),
-    {_, NewPri, Rng2} =
-        lists:foldl(
-          fun ({F, {_, ECnt}}, {I0, CurPri, CurRng}) ->
+          fun ({F, {_, ECnt}}, {CurPri, CurRng}) ->
                   {P, CurRng1} = rand:uniform_s(CurRng),
-                  case ECnt >= LastResetECnt of
-                      true ->
-                          I = I0 + 1,
-                          case sets:is_element(I, PriResetSet) of
-                              true ->
-                                  {I, dict:store(F, {P, ECnt}, CurPri), CurRng1};
-                              false ->
-                                  {I, dict:store(F, {P + 1, ECnt}, CurPri), CurRng1}
-                          end;
-                      false ->
-                          {I0, dict:store(F, {P + 1, ECnt}, CurPri), CurRng1}
-                  end
-          end, {0, dict:new(), Rng1}, SortedPriList),
+                  {dict:store(F, {P + 1, ECnt}, CurPri), CurRng1}
+          end, {dict:new(), Rng1}, SortedPriList),
     {Path, NewPri, Rng2}.
 
 try_hit_path(Cnt, Path) ->
@@ -69,7 +44,7 @@ try_hit_path(_, [], _, false) ->
     false;
 try_hit_path(_, [], R, true) ->
     R;
-try_hit_path(Cnt, [Cnt | T], R, _) ->
+try_hit_path(Cnt, [Cnt | T], R, false) ->
     try_hit_path(Cnt, T, R, true);
 try_hit_path(Cnt, [H | T], R, Matched) ->
     try_hit_path(Cnt, T, [H | R], Matched).
@@ -146,7 +121,7 @@ enqueue_req(#fd_delay_req{data = Data} = ReqInfo, #state{pri = Pri, reqs = Reqs,
                 {Rng, dict:store(From, {P, ECnt}, Pri)};
             error ->
                 {P, _NewRng} = rand:uniform_s(Rng),
-                {_NewRng, dict:store(From, {P, ECnt}, Pri)}
+                {_NewRng, dict:store(From, {P + 1, ECnt}, Pri)}
         end,
     {ReqP, Rng1} = rand:uniform_s(Rng0),
     {ok, State#state{pri = Pri1, reqs = array:set(array:size(Reqs), {ReqInfo, Cnt, Cnt, ReqP}, Reqs), enqueue_counter = ECnt + 1, rng = Rng1}}.
@@ -159,7 +134,7 @@ dequeue_req(#state{dequeue_counter = Cnt, guidance = [{Cnt, SeedTerm} | G]} = St
     io:format(user, "[FD] take guidance ~w, remaining ~w~n", [{Cnt, SeedTerm}, G]),
     dequeue_req(maybe_trace(State#state{reset_remain = 0, reset_path = [], rng = rand:seed_s(SeedTerm), dequeue_counter = 0, guidance = G}, {take_guidance, {Cnt, SeedTerm}, G}));
 dequeue_req(#state{pri = Pri, reqs = Reqs, reset_depth = Depth, reset_length = Length, reset_remain = 0,
-                   last_reset_enqueue_counter = LRECnt, enqueue_counter = ECnt,
+                   last_reset_enqueue_counter = _LRECnt, enqueue_counter = ECnt,
                    dequeue_counter = Cnt, rng = Rng} = State) ->
     {NewReqs, NewRng0} =
         array:foldl(
@@ -172,7 +147,7 @@ dequeue_req(#state{pri = Pri, reqs = Reqs, reset_depth = Depth, reset_length = L
           fun ({_, {_, E1}}, {_, {_, E2}}) ->
                   E1 < E2
           end, dict:to_list(Pri)),
-    {Path, Pri1, NewRng1} = build_reset_info(SortedPriList, LRECnt, Cnt, Depth, Length, NewRng0),
+    {Path, Pri1, NewRng1} = build_reset_info(SortedPriList, Cnt, Depth, Length, NewRng0),
     dequeue_req(maybe_trace(State#state{pri = Pri1, reqs = NewReqs, reset_remain = Length, reset_path = Path, last_reset_enqueue_counter = ECnt, rng = NewRng1},
                             {reset_path, Path, Pri1}));
 dequeue_req(#state{pri = Pri, reqs = Reqs, reset_remain = ResetRemain, reset_path = ResetPath, dequeue_counter = Cnt, rng = Rng} = State) ->
@@ -191,34 +166,30 @@ dequeue_req(#state{pri = Pri, reqs = Reqs, reset_remain = ResetRemain, reset_pat
                                B
                        end
                end, none, Reqs),
-    {#fd_delay_req{data = ReqData} = Req, Birth, _, _} = array:get(CI, Reqs),
-    NewReqList =
-        array:foldr(
-          fun (I, _, L) when I =:= CI ->
-                  L;
-              (_, Item, L) ->
-                  [Item | L]
-          end, [], Reqs),
-    NewReqs = array:from_list(NewReqList),
-    RetData = #{age => Cnt - Birth, weight => maps:get(weight, ReqData, undefined)},
     case try_hit_path(Cnt, ResetPath) of
         false ->
+            {#fd_delay_req{data = ReqData} = Req, Birth, _, _} = array:get(CI, Reqs),
+            NewReqList =
+                array:foldr(
+                  fun (I, _, L) when I =:= CI ->
+                          L;
+                      (_, Item, L) ->
+                          [Item | L]
+                  end, [], Reqs),
+            NewReqs = array:from_list(NewReqList),
+            RetData = #{age => Cnt - Birth, weight => maps:get(weight, ReqData, undefined)},
             { ok
             , Req
             , RetData
             , maybe_update_conc_length(State#state{reqs = NewReqs, reset_remain = ResetRemain - 1, dequeue_counter = Cnt + 1})};
         NewPath ->
             {NewFromP, NewRng} = rand:uniform_s(Rng),
-            case dict:fetch(CFrom, Pri) of
-                {_, ECnt} ->
-                    NewPri = dict:store(CFrom, {NewFromP, ECnt}, Pri)
-            end,
-            { ok
-            , Req
-            , RetData
-            , maybe_update_conc_length(
-                State#state{pri = NewPri, reqs = NewReqs, reset_remain = ResetRemain - 1, reset_path = NewPath,
-                            dequeue_counter = Cnt + 1, rng = NewRng})}
+            NewPri =
+                case dict:fetch(CFrom, Pri) of
+                    {_, ECnt} ->
+                        dict:store(CFrom, {NewFromP, ECnt}, Pri)
+                end,
+            dequeue_req(State#state{pri = NewPri, reset_path = NewPath, rng = NewRng})
     end.
 
 maybe_update_conc_length(#state{reqs = Reqs, conc_length = CL, max_conc_length = MaxCL} = State) ->
