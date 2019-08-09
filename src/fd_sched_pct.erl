@@ -48,7 +48,6 @@ try_hit_path(Cnt, [Cnt | T], R, false) ->
 try_hit_path(Cnt, [H | T], R, Matched) ->
     try_hit_path(Cnt, T, [H | R], Matched).
 
-
 init(Opts) ->
     {Seed, IsExternal} =
         case proplists:get_value(seed, Opts, undefined) of
